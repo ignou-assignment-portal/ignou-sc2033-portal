@@ -111,6 +111,7 @@ export const SystemSettingsView: React.FC = () => {
     toggleSyncDrawer,
     studentRegistrations,
     purgeOperationalData,
+    purgeOldDemoDataAndSyncLive,
     customAppsScriptUrl,
     setCustomAppsScriptUrl,
     testCustomConnection,
@@ -1211,12 +1212,24 @@ export const SystemSettingsView: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-100">
               <button
                 type="button"
-                onClick={() => syncGoogleSheets(true)}
+                onClick={() => syncGoogleSheets(false)}
                 disabled={isSyncingSheets}
                 className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+                title="Pull latest Intake Register and Course Ledger directly from Google Sheets"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin' : ''}`} />
                 <span>{isSyncingSheets ? 'Pulling Data...' : 'Pull Latest Sheet Intake'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => purgeOldDemoDataAndSyncLive()}
+                disabled={isSyncingSheets}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-2xs"
+                title="Clear browser cache and force fresh pull of all 46 intakes & 208 ledger records from Google Sheets"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin text-amber-700' : 'text-amber-700'}`} />
+                <span>Force Refresh (Clear Cache)</span>
               </button>
 
               <button

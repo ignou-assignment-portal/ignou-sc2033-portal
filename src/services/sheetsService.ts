@@ -246,7 +246,7 @@ export function extractRegistrationsFromSheetsPayload(_json: Record<string, any>
  * Uses 5-second automatic timeout with seamless local storage fallback.
  */
 export async function doGet(): Promise<HydrationResult> {
-  const timestamp = Date.now();
+  const timestamp = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   const startTime = Date.now();
 
   try {

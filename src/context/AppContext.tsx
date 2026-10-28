@@ -5092,7 +5092,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let data: any = null;
 
       // 1. Try direct fetch from SCRIPT_URL with redirect: "follow" and cache-busting
-      const timestampParam = `_t=${Date.now()}`;
+      const timestampParam = `_t=${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       try {
         const res = await fetch(`${SCRIPT_URL}?${timestampParam}`, {
           method: "GET",

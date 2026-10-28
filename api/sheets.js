@@ -1,6 +1,7 @@
 /**
  * Vercel Serverless Function Proxy for Google Apps Script Web App
- * Avoids CORS limitations and smoothly follows 302 redirects from script.google.com
+ * Avoids CORS limitations, smoothly follows 302 redirects from script.google.com,
+ * and strictly disables caching so all newly added rows in Google Sheets appear immediately.
  */
 
 const DEFAULT_SCRIPT_URL =
@@ -18,6 +19,12 @@ export default async function handler(req, res) {
     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
   );
 
+  // Disable caching entirely across all proxies, CDNs, and browsers
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -28,19 +35,23 @@ export default async function handler(req, res) {
     const targetScriptUrl = customUrl || DEFAULT_SCRIPT_URL;
 
     if (req.method === "GET") {
-      // Forward all search query parameters
+      // Forward all search query parameters with unique cache buster
       const urlObj = new URL(targetScriptUrl);
       Object.keys(req.query).forEach((key) => {
         if (key !== "scriptUrl") {
           urlObj.searchParams.set(key, String(req.query[key]));
         }
       });
+      urlObj.searchParams.set("_cb", `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
 
       const response = await fetch(urlObj.toString(), {
         method: "GET",
         headers: {
           Accept: "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         },
+        cache: "no-store",
         redirect: "follow",
       });
 
@@ -66,8 +77,11 @@ export default async function handler(req, res) {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
         },
         body: payload,
+        cache: "no-store",
         redirect: "follow",
       });
 
