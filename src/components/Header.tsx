@@ -12,12 +12,15 @@ import {
   Home,
 } from 'lucide-react';
 import { InstitutionalSeal } from './InstitutionalSeal';
+import { RecentActivity } from './RecentActivity';
+import { TabType } from './Sidebar';
 
 interface HeaderProps {
   onViewHome?: () => void;
+  onNavigateTab?: (tab: TabType) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onViewHome }) => {
+export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => {
   const {
     currentSession,
     setSession,
@@ -152,8 +155,14 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome }) => {
           <Search className="w-4 h-4 text-indigo-600" />
         </button>
 
-        {/* Zone 3: Academic Cycle & Executive Profile / Role */}
+        {/* Zone 3: Recent Activity, Academic Cycle & Executive Profile / Role */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Recent Activity Popover (Last 5 Audit Trail Operations) */}
+          <RecentActivity
+            onViewAllActivity={onNavigateTab ? () => onNavigateTab('AUDIT_TRAIL') : undefined}
+            compact={isHeaderCompact}
+          />
+
           {/* Academic Session Selector */}
           <div className="relative">
             <button

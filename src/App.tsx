@@ -57,7 +57,7 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ onViewHome }) => {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Institutional Top Header */}
-      <Header onViewHome={onViewHome} />
+      <Header onViewHome={onViewHome} onNavigateTab={setActiveTab} />
 
       {/* Main Layout: Collapsible & Hideable Left Sidebar + Responsive Workspace */}
       <div className="flex flex-1 relative">
