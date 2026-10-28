@@ -530,6 +530,20 @@ export const ReceiptModal: React.FC = () => {
             </div>
           )}
 
+          {((selectedReceiptRecord as any).verifiedInPhysicalRegister || matchingIntakeRecord?.verifiedInPhysicalRegister) && (
+            <div className="mt-1 text-[10px] print:text-[8px] text-emerald-900 bg-emerald-50/80 p-1.5 print:p-1 rounded border border-emerald-300 flex items-center justify-between">
+              <span className="font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 inline" />
+                <span>Historical Sessions: Verified in Physical Study Centre Register</span>
+              </span>
+              {((selectedReceiptRecord as any).physicalRegisterNote || matchingIntakeRecord?.physicalRegisterNote) && (
+                <span className="font-mono text-[9px] text-emerald-800">
+                  Ref: {(selectedReceiptRecord as any).physicalRegisterNote || matchingIntakeRecord?.physicalRegisterNote}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Important Notices for the Learner */}
           <div className="mt-1.5 print:mt-1 p-2 print:p-1 rounded-lg border border-amber-200 bg-amber-50/70 text-[10px] print:text-[8px] text-amber-900">
             <div className="font-bold flex items-center gap-1 text-amber-950 mb-0.5">

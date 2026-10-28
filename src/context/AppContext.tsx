@@ -353,6 +353,7 @@ interface AppContextType {
   freshAdmissions: StudentRegistrationRecord[];
   reRegistrations: StudentRegistrationRecord[];
   getStudentRegistrationByEnrollment: (enrollmentNo: string) => StudentRegistrationRecord | null;
+  getAllStudentRegistrationsByEnrollment: (enrollmentNo: string) => StudentRegistrationRecord[];
   addStudentRegistration: (record: Omit<StudentRegistrationRecord, 'id' | 'createdAt' | 'updatedAt'>) => StudentRegistrationRecord;
   batchImportStudentRegistrations: (records: StudentRegistrationRecord[], overwriteDuplicates?: boolean) => { added: number; updated: number; skipped: number };
   updateStudentRegistration: (id: string, updates: Partial<StudentRegistrationRecord>) => void;
@@ -4055,6 +4056,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [studentRegistrations, currentSession]
   );
 
+  const getAllStudentRegistrationsByEnrollment = useCallback(
+    (enrollmentNo: string): StudentRegistrationRecord[] => {
+      const cleanEnr = String(enrollmentNo || '').replace(/\D/g, '').trim();
+      if (!cleanEnr) return [];
+      return studentRegistrations.filter(
+        (r) => String(r.enrollmentNo || '').replace(/\D/g, '').trim() === cleanEnr
+      );
+    },
+    [studentRegistrations]
+  );
+
   const getRegisteredProgrammeForEnrollment = useCallback(
     (enrollmentNo: string, currentIntakeId?: string) => {
       const cleanEnr = String(enrollmentNo || '').replace(/\D/g, '').trim();
@@ -4077,14 +4089,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const getEnrolledCoursesForStudent = useCallback(
     (enrollmentNo: string, currentIntakeId?: string) => {
-      return getEnrolledCoursesHelper(
+      const cleanEnr = String(enrollmentNo || '').replace(/\D/g, '').trim();
+      const existing = getEnrolledCoursesHelper(
         enrollmentNo,
         intakes,
         courseEvaluations,
         currentIntakeId
       );
+      // Aggregate courses from all registration rosters (Fresh Admissions & Re-Registrations)
+      const regCourses = studentRegistrations
+        .filter((r) => String(r.enrollmentNo || '').replace(/\D/g, '').trim() === cleanEnr)
+        .flatMap((r) => r.courseCodes || [])
+        .map((c) => String(c).trim().toUpperCase())
+        .filter(Boolean);
+      return new Set([...existing, ...regCourses]);
     },
-    [intakes, courseEvaluations]
+    [intakes, courseEvaluations, studentRegistrations]
   );
 
   const getEnrolledCourseComponentsForStudent = useCallback(
@@ -6611,6 +6631,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         freshAdmissions,
         reRegistrations,
         getStudentRegistrationByEnrollment,
+        getAllStudentRegistrationsByEnrollment,
         addStudentRegistration,
         batchImportStudentRegistrations,
         updateStudentRegistration,

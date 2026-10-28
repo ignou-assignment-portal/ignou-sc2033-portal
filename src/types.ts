@@ -55,6 +55,8 @@ export interface IntakeRecord {
   }>;
   isIntegrated?: boolean; // True if this intake has been integrated part-by-part
   integratedPartsCount?: number;
+  verifiedInPhysicalRegister?: boolean; // True if desk official verified past session submissions in paper register
+  physicalRegisterNote?: string; // Optional register book/page reference
   submissionParts?: Array<{
     partNo: number;
     submissionDate: string;

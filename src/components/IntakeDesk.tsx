@@ -134,6 +134,7 @@ export const IntakeDesk: React.FC = () => {
     courseTitlesRegistry,
     studentRegistrations,
     getStudentRegistrationByEnrollment,
+    getAllStudentRegistrationsByEnrollment,
     getRegisteredProgrammeForEnrollment,
     getEnrolledCoursesForStudent,
     getEnrolledCourseComponentsForStudent,
@@ -148,6 +149,8 @@ export const IntakeDesk: React.FC = () => {
   const [studentName, setStudentName] = useState('');
   const [studentPhone, setStudentPhone] = useState('');
   const [studentEmail, setStudentEmail] = useState('');
+  const [verifiedInPhysicalRegister, setVerifiedInPhysicalRegister] = useState(false);
+  const [physicalRegisterNote, setPhysicalRegisterNote] = useState('');
   const [selectedProgramme, setSelectedProgramme] = useState('');
   const [selectedSession, setSelectedSession] = useState(currentSession);
   const [courseSearchInput, setCourseSearchInput] = useState('');
@@ -423,12 +426,45 @@ export const IntakeDesk: React.FC = () => {
     sessionRegistrationReceipts,
   ]);
 
-  // Active student registration profile (Fresh Admission or Re-Registration)
+  // Multi-cycle student registration records (All matching Fresh Admissions and Re-Registrations)
+  const studentRegistrationsList = useMemo(() => {
+    const clean = String(enrollmentNo || '').replace(/\D/g, '').trim();
+    if (!clean || clean.length < 5) return [];
+    return getAllStudentRegistrationsByEnrollment(clean);
+  }, [enrollmentNo, getAllStudentRegistrationsByEnrollment, studentRegistrations]);
+
+  // Active student registration profile (prioritizes current cycle or latest registration)
   const studentRegistration = useMemo(() => {
+    if (studentRegistrationsList.length > 0) {
+      const inCurrent = studentRegistrationsList.find((r) => norm(r.session) === norm(currentSession));
+      if (inCurrent) return inCurrent;
+      return studentRegistrationsList[studentRegistrationsList.length - 1];
+    }
     const clean = String(enrollmentNo || '').replace(/\D/g, '').trim();
     if (!clean || clean.length < 5) return null;
     return getStudentRegistrationByEnrollment(clean);
-  }, [enrollmentNo, getStudentRegistrationByEnrollment, studentRegistrations]);
+  }, [studentRegistrationsList, enrollmentNo, getStudentRegistrationByEnrollment, currentSession]);
+
+  // Consolidated course list across all registration cycles (Fresh 1st Year, Re-Reg 2nd/3rd Year)
+  const allRegisteredCoursesFromRosters = useMemo(() => {
+    const list: Array<{ code: string; cadre: string; academicYear: string; session: string }> = [];
+    const seen = new Set<string>();
+    studentRegistrationsList.forEach((r) => {
+      (r.courseCodes || []).forEach((c) => {
+        const code = String(c).trim().toUpperCase();
+        if (code && !seen.has(code)) {
+          seen.add(code);
+          list.push({
+            code,
+            cadre: r.cadre === 'FRESH' ? 'Fresh Admission' : 'Re-Registration',
+            academicYear: r.academicYear || (r.cadre === 'FRESH' ? '1st Year' : '2nd/3rd Year'),
+            session: r.session || '',
+          });
+        }
+      });
+    });
+    return list;
+  }, [studentRegistrationsList]);
 
   const registrationEligibility = useMemo(() => {
     if (!studentRegistration) return null;
@@ -1269,6 +1305,8 @@ export const IntakeDesk: React.FC = () => {
         remarks: remarks.trim() || undefined,
         status: 'Received',
         registeredBy,
+        verifiedInPhysicalRegister,
+        physicalRegisterNote: physicalRegisterNote.trim() || undefined,
       });
 
       // 2. Link each registered course in mock table AssignmentSubmissions
@@ -1358,6 +1396,8 @@ export const IntakeDesk: React.FC = () => {
       setConsignmentNo('');
       setRemarks('');
       setCourseSearchInput('');
+      setVerifiedInPhysicalRegister(false);
+      setPhysicalRegisterNote('');
     } catch (err: any) {
       console.error(err);
       const msg = err?.message || 'Failed to complete registration and store receipt. Please try again.';
@@ -2367,8 +2407,82 @@ export const IntakeDesk: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Academic Admission & Re-Registration Profile Card (Fresh Admission vs Re-Registration) */}
-                {studentRegistration ? (
+                {/* Academic Admission & Re-Registration Profile Card (Fresh Admission + Re-Registration) */}
+                {studentRegistrationsList.length > 0 ? (
+                  <div className="p-3.5 bg-indigo-50/95 border-2 border-indigo-300 rounded-xl space-y-3 animate-in fade-in shadow-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-200/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-indigo-950 text-xs sm:text-sm flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-indigo-700" />
+                          <span>Student Profile: {studentRegistration?.studentName}</span>
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-emerald-100 text-emerald-950 px-2 py-0.5 rounded-full border border-emerald-300">
+                          {studentRegistrationsList.length > 1
+                            ? `Dual Status: Fresh + Re-Registration (${studentRegistrationsList.length} Records)`
+                            : studentRegistration?.cadre === 'FRESH'
+                            ? 'Fresh Admission'
+                            : 'Re-Registration'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-mono font-bold text-indigo-900">
+                        <span>Programme: {selectedProgramme || studentRegistration?.programmeCode}</span>
+                        <span className="text-indigo-300">•</span>
+                        <span>{allRegisteredCoursesFromRosters.length} Enrolled Courses</span>
+                      </div>
+                    </div>
+
+                    {/* All Registered Status Badges & Cycles (Fresh Admission + Re-Registration from Google Sheets) */}
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-bold text-indigo-950 flex items-center gap-1">
+                        <Layers className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Google Sheets Registration Records (Fresh Admission & Re-Registration):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {studentRegistrationsList.map((reg, idx) => (
+                          <div
+                            key={reg.id || idx}
+                            className={`p-2.5 rounded-lg border text-xs flex flex-col justify-between gap-1.5 ${
+                              reg.cadre === 'FRESH'
+                                ? 'bg-blue-50/90 border-blue-200 text-blue-950'
+                                : 'bg-purple-50/90 border-purple-200 text-purple-950'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-extrabold text-[11px] flex items-center gap-1">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    reg.cadre === 'FRESH' ? 'bg-blue-600' : 'bg-purple-600'
+                                  }`}
+                                />
+                                {reg.cadre === 'FRESH' ? 'Fresh Admission' : 'Re-Registration'}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold bg-white/90 px-1.5 py-0.5 rounded border border-zinc-200 text-zinc-800">
+                                {reg.academicYear || (reg.cadre === 'FRESH' ? '1st Year' : '2nd/3rd Year')}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10.5px] font-mono text-zinc-700">
+                              <span>Admitted Session: <strong>{reg.session}</strong></span>
+                              <span>{reg.courseCodes.length} Registered Courses</span>
+                            </div>
+                            <div className="text-[10px] text-zinc-600 truncate font-mono">
+                              Courses: {reg.courseCodes.join(', ')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between text-xs text-indigo-900 gap-2 border-t border-indigo-200/70 pt-2">
+                      <div className="flex items-center gap-1.5">
+                        <GraduationCap className="w-3.5 h-3.5 text-indigo-700" />
+                        <span className="font-semibold">{programmeDurationInfo.description}</span>
+                      </div>
+                      <div className="text-[11px] font-bold text-indigo-800 bg-white/80 px-2 py-0.5 rounded-md border border-indigo-200">
+                        {registrationEligibility?.description}
+                      </div>
+                    </div>
+                  </div>
+                ) : studentRegistration ? (
                   <div className="p-3.5 bg-indigo-50/95 border-2 border-indigo-300 rounded-xl space-y-2 animate-in fade-in shadow-2xs">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -3015,30 +3129,42 @@ export const IntakeDesk: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Automated Course Codes Reader from Fresh Admission or Re-Registration */}
-                  {studentRegistration && studentRegistration.courseCodes && studentRegistration.courseCodes.length > 0 && (
+                  {/* Automated Course Codes Reader from Fresh Admission and Re-Registration Rosters */}
+                  {(allRegisteredCoursesFromRosters.length > 0 || (studentRegistration && studentRegistration.courseCodes && studentRegistration.courseCodes.length > 0)) && (
                     <div className="mb-3.5 p-3.5 bg-indigo-50/95 border-2 border-indigo-300 rounded-xl space-y-2.5 animate-in fade-in shadow-2xs">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-200/80 pb-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-extrabold text-indigo-950 text-xs sm:text-sm flex items-center gap-1.5">
                               <BookOpen className="w-4 h-4 text-indigo-700" />
-                              <span>Registered Course Codes Read from {studentRegistration.cadre === 'FRESH' ? 'Fresh Admission' : 'Re-Registration'}</span>
+                              <span>
+                                Registered Courses from Google Sheets{' '}
+                                {studentRegistrationsList.length > 1
+                                  ? '(Fresh Admission + Re-Registration)'
+                                  : studentRegistration?.cadre === 'FRESH'
+                                  ? '(Fresh Admission)'
+                                  : '(Re-Registration)'}
+                              </span>
                             </span>
                             <span className="text-[10px] font-mono font-bold bg-indigo-200 text-indigo-950 px-2 py-0.5 rounded-full border border-indigo-300">
-                              {studentRegistration.academicYear} • Cycle: {studentRegistration.session}
+                              {allRegisteredCoursesFromRosters.length > 0
+                                ? `${allRegisteredCoursesFromRosters.length} Registered Courses Available`
+                                : `${studentRegistration?.courseCodes?.length || 0} Courses`}
                             </span>
                           </div>
                           <p className="text-[11px] text-indigo-800 mt-0.5">
-                            Click individual course cards to select/deselect, or click "Select All Registered" to populate the submission queue.
+                            Click individual course cards to select, or use the quick selection buttons to populate the current session intake queue.
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
                           <button
                             type="button"
                             onClick={() => {
-                              const enrolled = studentRegistration.courseCodes.map((c) => c.trim().toUpperCase());
+                              const enrolled = (allRegisteredCoursesFromRosters.length > 0
+                                ? allRegisteredCoursesFromRosters.map((c) => c.code)
+                                : studentRegistration?.courseCodes || []
+                              ).map((c) => c.trim().toUpperCase());
                               setSelectedCourses((prev) => Array.from(new Set([...prev, ...enrolled])));
                               setCourseComponentTypes((prev) => {
                                 const updated = { ...prev };
@@ -3053,7 +3179,7 @@ export const IntakeDesk: React.FC = () => {
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Select All Registered ({studentRegistration.courseCodes.length})</span>
+                            <span>Select All Registered ({allRegisteredCoursesFromRosters.length > 0 ? allRegisteredCoursesFromRosters.length : studentRegistration?.courseCodes?.length})</span>
                           </button>
 
                           {selectedCourses.length > 0 && (
@@ -3073,10 +3199,18 @@ export const IntakeDesk: React.FC = () => {
 
                       {/* Enrolled Courses Interactive Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                        {studentRegistration.courseCodes.map((code) => {
-                          const cleanCode = code.trim().toUpperCase();
+                        {(allRegisteredCoursesFromRosters.length > 0
+                          ? allRegisteredCoursesFromRosters
+                          : (studentRegistration?.courseCodes || []).map((c) => ({
+                              code: c,
+                              cadre: studentRegistration?.cadre === 'FRESH' ? 'Fresh Admission' : 'Re-Registration',
+                              academicYear: studentRegistration?.academicYear || '',
+                              session: studentRegistration?.session || '',
+                            }))
+                        ).map((item) => {
+                          const cleanCode = item.code.trim().toUpperCase();
                           const isSelected = selectedCourses.includes(cleanCode);
-                          const title = getCourseTitle(cleanCode, studentRegistration.programmeCode);
+                          const title = getCourseTitle(cleanCode, selectedProgramme || studentRegistration?.programmeCode);
                           const isPractical = isPracticalCourse(cleanCode, title);
                           const isAlreadyEnrolled = alreadyEnrolledCourses instanceof Set ? alreadyEnrolledCourses.has(cleanCode) : false;
 
@@ -3114,6 +3248,11 @@ export const IntakeDesk: React.FC = () => {
                                   }`}>
                                     {isPractical ? 'Practical' : 'Assignment'}
                                   </span>
+                                  {item.academicYear && (
+                                    <span className="text-[8.5px] font-mono font-semibold px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                      {item.academicYear}
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div className={`w-4 h-4 rounded flex items-center justify-center border transition shrink-0 ${
@@ -3133,12 +3272,9 @@ export const IntakeDesk: React.FC = () => {
                                 <span className={isSelected ? 'text-emerald-800 font-bold' : 'text-zinc-500'}>
                                   {isSelected ? '✓ Selected for Intake' : 'Click to select'}
                                 </span>
-                                {isAlreadyEnrolled && (
-                                  <span className="text-amber-800 font-bold flex items-center gap-0.5">
-                                    <Lock className="w-2.5 h-2.5" />
-                                    <span>Already Enrolled</span>
-                                  </span>
-                                )}
+                                <span className="text-[9px] font-mono text-zinc-500">
+                                  {item.cadre}
+                                </span>
                               </div>
                             </div>
                           );
@@ -3683,6 +3819,40 @@ export const IntakeDesk: React.FC = () => {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* Physical Paper Register Verification (Optional for Past Session Submissions) */}
+                <div className="p-3.5 bg-slate-50/90 border border-slate-300 rounded-xl space-y-2">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      id="verified-in-physical-register-checkbox"
+                      checked={verifiedInPhysicalRegister}
+                      onChange={(e) => setVerifiedInPhysicalRegister(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-zinc-300 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <BookOpen className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>Previous Session Assignments Verified in Physical Register (Optional)</span>
+                      </span>
+                      <p className="text-[11px] text-slate-600 mt-0.5">
+                        Since earlier sessions were recorded manually in the physical study centre register, check this box if this student's past semester/year assignment records have been verified in the hard-copy register.
+                      </p>
+                    </div>
+                  </label>
+                  {verifiedInPhysicalRegister && (
+                    <div className="pl-6 pt-1 animate-in fade-in">
+                      <input
+                        type="text"
+                        id="physical-register-note-input"
+                        value={physicalRegisterNote}
+                        onChange={(e) => setPhysicalRegisterNote(e.target.value)}
+                        placeholder="Optional: Register Volume / Page No. / Session (e.g. 2024-25 Vol-I, Page 72)"
+                        className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 bg-white"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Form Actions: "Submit & Generate Receipt" (Non-Financial) */}
