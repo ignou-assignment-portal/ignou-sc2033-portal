@@ -559,38 +559,15 @@ export const parseEvaluatorsMaster = (rawList: any[]): Evaluator[] => {
   });
 };
 
-const DUMMY_SEED_ENROLLMENTS = new Set([
-  '2350198421', '2350198455', '2350198490', '2240981723', '2240981750',
-  '2109483721', '2401829103', '2391028374', '2401928371', '2450192831',
-  '2510294812', '2510294899', '2209182390', '2351829014', '2410982341',
-  '2601365755', '2601620450', '2601620613', '2601615010', '2601789028',
-  '2601788989', '2352267466', '2651819010', '2101910933', '2651888161',
-  '2401102911', '2401102922', '2301827364', '2301984210', '2452201010',
-  '2452201020', '2201830549', '2501103030', '2501103040', '2550184040',
-  '2550184050', '2601928388'
-]);
+const DUMMY_SEED_ENROLLMENTS = new Set<string>([]);
 
-const DUMMY_STUDENT_NAMES = new Set([
-  'aarav sharma', 'pooja bhattacharya', 'mohammad tariq', 'kavita kumari',
-  'rohan joshi', 'temsula ao', 'divya soni', 'vikramaditya rao',
-  'neha malhotra', 'riya sen', 'rahul verma', 'deepa joshi',
-  'sunita meena', 'vikram malhotra', 'manish kumar tiwari',
-  'vizanu k zhimo', 'sruti basumatary', 'chandeno yanthan', 'anisha tasmin',
-  'priya parveen', 'rojita singh', 'sushmita paul', 'vipeni g yeptho',
-  'kanhaiya shah', 'md rehan', 'imtikumzuk ao', 'neikethono kense',
-  'sangita das', 'arenla pongen', 'suresh sharma', 'ananya chatterjee',
-  's. lamtang phon', 'zubeni kikon', 'manoj prasad', 'alongba chang',
-  'rani devi', 'bendangtoshi jamir'
-]);
+const DUMMY_STUDENT_NAMES = new Set<string>([]);
 
 export const isDummySubmissionId = (id: string, studentId?: string, studentName?: string): boolean => {
   const sId = String(id || '').trim();
   if (sId.startsWith('sub-jul26-') || sId.startsWith('sub-jan27-') || sId.startsWith('sub-jan26-') || sId.startsWith('sub-seed-')) return true;
   if (studentId && DUMMY_SEED_ENROLLMENTS.has(String(studentId).trim())) return true;
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
-  if (sId.startsWith('sub-') && studentId && DUMMY_SEED_ENROLLMENTS.has(String(studentId).trim())) {
-    return true;
-  }
   return false;
 };
 
@@ -609,9 +586,6 @@ export const isDummyEvaluationId = (id: string, intakeId?: string, enrollmentNo?
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
   const sId = String(id || '').trim();
   if (sId.startsWith('eval-jul26-') || sId.startsWith('eval-jan27-') || sId.startsWith('eval-jan26-') || sId.startsWith('eval-seed-')) return true;
-  for (const enr of DUMMY_SEED_ENROLLMENTS) {
-    if (sId.includes(`_${enr}_`)) return true;
-  }
   return false;
 };
 
@@ -6412,7 +6386,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // One-time automatic purge of old demo data from browser localStorage
   useEffect(() => {
-    const BOOT_PURGE_KEY = 'ignou_sc2033_cleared_old_demo_v9';
+    const BOOT_PURGE_KEY = 'ignou_sc2033_cleared_old_demo_v10';
     if (localStorage.getItem(BOOT_PURGE_KEY) !== 'true') {
       localStorage.removeItem('ignou_sc2033_intake');
       localStorage.removeItem(STORAGE_KEYS.INTAKES);

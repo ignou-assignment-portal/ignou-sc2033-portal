@@ -56,8 +56,9 @@ import {
   Copy,
 } from 'lucide-react';
 import { OFFICIAL_APPS_SCRIPT_CODE, SCRIPT_URL } from '../services/sheetsService';
+import { IntegrityDebuggerPanel } from './IntegrityDebuggerPanel';
 
-type SettingsTabId = 'general' | 'appearance' | 'rates' | 'sync' | 'rbac';
+type SettingsTabId = 'general' | 'appearance' | 'rates' | 'sync' | 'debugger' | 'rbac';
 
 export const SystemSettingsView: React.FC = () => {
   const {
@@ -544,6 +545,20 @@ export const SystemSettingsView: React.FC = () => {
               {pendingSyncQueue.length}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('debugger')}
+          id="btn-settings-tab-debugger"
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'debugger'
+              ? 'bg-white text-indigo-950 shadow-xs border border-zinc-200'
+              : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50'
+          }`}
+        >
+          <Database className={`w-4 h-4 ${activeTab === 'debugger' ? 'text-emerald-600' : 'text-zinc-500'}`} />
+          <span>Integrity Debugger</span>
         </button>
 
         <button
@@ -1253,6 +1268,9 @@ export const SystemSettingsView: React.FC = () => {
             </div>
           </div>
 
+          {/* Integrity Debugger Tool (Raw Sheet vs. Processed App Rows Verification & Auto-Fix) */}
+          <IntegrityDebuggerPanel />
+
           {/* Google Apps Script Backend (Code.gs) & Live Sync Diagnostics */}
           <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 gap-2">
@@ -1882,7 +1900,14 @@ export const SystemSettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: ROLE-BASED ACCESS CONTROL (RBAC) & GOVERNANCE */}
+      {/* TAB 5: INTEGRITY DEBUGGER (RAW SHEET VS. APP STATE VERIFICATION) */}
+      {activeTab === 'debugger' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <IntegrityDebuggerPanel />
+        </div>
+      )}
+
+      {/* TAB 6: ROLE-BASED ACCESS CONTROL (RBAC) & GOVERNANCE */}
       {activeTab === 'rbac' && <RbacGovernanceSettings />}
 
       {/* Modal 2: Snapshot Detail Inspector Dialog */}
