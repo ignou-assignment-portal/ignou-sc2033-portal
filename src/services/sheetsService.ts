@@ -301,10 +301,10 @@ export async function doGet(): Promise<HydrationResult> {
   // Direct client fetch fallback with cache-busting and 15s timeout
   try {
     const directUrl = getFullAppsScriptUrl();
-    const directRes = await fetch(`${directUrl}?_t=${timestamp}`, {
+    const directRes = await fetch(`${directUrl}?action=doGet&_cb=${timestamp}`, {
       method: 'GET',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(25000),
     });
     if (directRes.ok) {
       const data = await directRes.json();

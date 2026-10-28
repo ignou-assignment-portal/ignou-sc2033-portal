@@ -5091,17 +5091,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       let data: any = null;
 
-      // 1. Try direct fetch from SCRIPT_URL with redirect: "follow" and cache-busting
-      const timestampParam = `_t=${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // 1. Try direct fetch from SCRIPT_URL with redirect: "follow" and clean cache-busting (without custom headers that trigger CORS preflight)
+      const timestampParam = `_cb=${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const targetScriptUrl = getCustomScriptUrl();
       try {
-        const res = await fetch(`${SCRIPT_URL}?${timestampParam}`, {
+        const res = await fetch(`${targetScriptUrl}?action=doGet&${timestampParam}`, {
           method: "GET",
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-          },
-          cache: "no-store",
           redirect: "follow",
+          signal: AbortSignal.timeout(15000),
         });
         if (res.ok) {
           const contentType = res.headers.get("content-type") || "";
@@ -5123,14 +5120,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. If direct fetch failed or gave non-JSON, try the Express backend proxy
       if (!data || (!data.intakeRegister && !data.intakes && !data.courseLedger)) {
         try {
-          const proxyRes = await fetch(`/api/sheets?action=doGet&scriptUrl=${encodeURIComponent(SCRIPT_URL)}&${timestampParam}`, {
+          const proxyRes = await fetch(`/api/sheets?action=doGet&scriptUrl=${encodeURIComponent(targetScriptUrl)}&${timestampParam}`, {
             method: "GET",
             headers: {
               Accept: "application/json",
-              "Cache-Control": "no-cache, no-store, must-revalidate",
-              Pragma: "no-cache",
             },
             cache: "no-store",
+            signal: AbortSignal.timeout(25000),
           });
           if (proxyRes.ok) {
             data = await proxyRes.json();

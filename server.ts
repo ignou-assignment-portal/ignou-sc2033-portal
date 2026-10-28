@@ -626,7 +626,7 @@ app.get("/api/sheets", async (req, res) => {
       },
       cache: "no-store",
       redirect: "follow",
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
 
     console.log(`[Proxy GET] Apps Script status: ${remoteResponse.status}`);

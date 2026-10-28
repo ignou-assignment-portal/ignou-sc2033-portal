@@ -53,6 +53,7 @@ export default async function handler(req, res) {
         },
         cache: "no-store",
         redirect: "follow",
+        signal: AbortSignal.timeout(30000),
       });
 
       const responseText = await response.text();
@@ -83,6 +84,7 @@ export default async function handler(req, res) {
         body: payload,
         cache: "no-store",
         redirect: "follow",
+        signal: AbortSignal.timeout(30000),
       });
 
       const responseText = await response.text();
