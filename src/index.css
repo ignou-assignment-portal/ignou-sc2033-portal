@@ -1,0 +1,385 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   THEME STYLES & COLOR VARIABLES
+   ========================================================================== */
+
+:root {
+  --theme-primary: #1e1b4b;
+  --theme-accent: #4338ca;
+  --theme-bg: #f4f4f5;
+  --theme-surface: #ffffff;
+  --theme-border: #e4e4e7;
+  --theme-text: #18181b;
+}
+
+/* Smooth transition when changing themes (excluded during printing) */
+body, header, nav, aside, main, footer, .card-theme-transition {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+}
+
+/* --------------------------------------------------------------------------
+   1. EXECUTIVE DARK THEME (data-theme="dark" or .dark)
+   -------------------------------------------------------------------------- */
+[data-theme="dark"],
+html.dark {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] body,
+html.dark body {
+  background-color: #090d16 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="dark"] .bg-zinc-100,
+[data-theme="dark"] .bg-zinc-50,
+html.dark .bg-zinc-100,
+html.dark .bg-zinc-50 {
+  background-color: #0d131f !important;
+}
+
+[data-theme="dark"] .bg-white,
+html.dark .bg-white {
+  background-color: #131b2e !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] header.bg-white,
+html.dark header.bg-white {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] aside.bg-white,
+html.dark aside.bg-white {
+  background-color: #111827 !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] footer.bg-white,
+html.dark footer.bg-white {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .border-zinc-200,
+[data-theme="dark"] .border-zinc-300,
+[data-theme="dark"] .border-zinc-100,
+html.dark .border-zinc-200,
+html.dark .border-zinc-300,
+html.dark .border-zinc-100 {
+  border-color: #1e293b !important;
+}
+
+[data-theme="dark"] .text-zinc-900,
+[data-theme="dark"] .text-zinc-800,
+[data-theme="dark"] .text-zinc-950,
+html.dark .text-zinc-900,
+html.dark .text-zinc-800,
+html.dark .text-zinc-950 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .text-zinc-700,
+[data-theme="dark"] .text-zinc-600,
+html.dark .text-zinc-700,
+html.dark .text-zinc-600 {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .text-zinc-500,
+html.dark .text-zinc-500 {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .hover\:bg-zinc-100:hover,
+[data-theme="dark"] .hover\:bg-zinc-50:hover,
+html.dark .hover\:bg-zinc-100:hover,
+html.dark .hover\:bg-zinc-50:hover {
+  background-color: #1e293b !important;
+}
+
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #151e32 !important;
+  border-color: #24324d !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+[data-theme="dark"] table thead,
+html.dark table thead {
+  background-color: #0f172a !important;
+}
+
+[data-theme="dark"] table tbody tr:hover,
+html.dark table tbody tr:hover {
+  background-color: #182238 !important;
+}
+
+[data-theme="dark"] .bg-indigo-50,
+html.dark .bg-indigo-50 {
+  background-color: #1e1b4b !important;
+  color: #c7d2fe !important;
+}
+
+[data-theme="dark"] .border-indigo-200,
+html.dark .border-indigo-200 {
+  border-color: #3730a3 !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. EMERALD CAMPUS THEME (data-theme="emerald")
+   -------------------------------------------------------------------------- */
+[data-theme="emerald"] body,
+[data-theme="emerald"] .bg-zinc-100 {
+  background-color: #f0f7f3 !important;
+}
+
+[data-theme="emerald"] .bg-zinc-50 {
+  background-color: #f5faf7 !important;
+}
+
+[data-theme="emerald"] header .bg-indigo-950,
+[data-theme="emerald"] .bg-indigo-950 {
+  background-color: #064e3b !important;
+}
+
+[data-theme="emerald"] .border-zinc-200 {
+  border-color: #d1e7dd !important;
+}
+
+[data-theme="emerald"] .text-indigo-600,
+[data-theme="emerald"] .text-indigo-700,
+[data-theme="emerald"] .text-indigo-800 {
+  color: #047857 !important;
+}
+
+[data-theme="emerald"] .bg-indigo-600 {
+  background-color: #059669 !important;
+}
+
+[data-theme="emerald"] .bg-indigo-600:hover {
+  background-color: #047857 !important;
+}
+
+[data-theme="emerald"] .bg-indigo-50 {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+}
+
+[data-theme="emerald"] .border-indigo-200 {
+  border-color: #a7f3d0 !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. ROYAL INDIGO THEME (data-theme="indigo")
+   -------------------------------------------------------------------------- */
+[data-theme="indigo"] body,
+[data-theme="indigo"] .bg-zinc-100 {
+  background-color: #f2f4fa !important;
+}
+
+[data-theme="indigo"] .border-zinc-200 {
+  border-color: #e0e7ff !important;
+}
+
+[data-theme="indigo"] .text-indigo-600,
+[data-theme="indigo"] .text-indigo-700 {
+  color: #3730a3 !important;
+}
+
+[data-theme="indigo"] .bg-indigo-950 {
+  background-color: #1e1b4b !important;
+}
+
+[data-theme="indigo"] .bg-indigo-600 {
+  background-color: #4338ca !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. SANDSTONE HERITAGE THEME (data-theme="sandstone")
+   -------------------------------------------------------------------------- */
+[data-theme="sandstone"] body,
+[data-theme="sandstone"] .bg-zinc-100 {
+  background-color: #faf6ef !important;
+}
+
+[data-theme="sandstone"] .bg-zinc-50 {
+  background-color: #fcf9f4 !important;
+}
+
+[data-theme="sandstone"] .bg-white {
+  background-color: #fffdfa !important;
+}
+
+[data-theme="sandstone"] .border-zinc-200,
+[data-theme="sandstone"] .border-zinc-300 {
+  border-color: #ebdcc9 !important;
+}
+
+[data-theme="sandstone"] .bg-indigo-950 {
+  background-color: #451a03 !important;
+}
+
+[data-theme="sandstone"] .text-indigo-600,
+[data-theme="sandstone"] .text-indigo-700,
+[data-theme="sandstone"] .text-indigo-800 {
+  color: #92400e !important;
+}
+
+[data-theme="sandstone"] .bg-indigo-600 {
+  background-color: #b45309 !important;
+}
+
+[data-theme="sandstone"] .bg-indigo-600:hover {
+  background-color: #92400e !important;
+}
+
+[data-theme="sandstone"] .bg-indigo-50 {
+  background-color: #fef3c7 !important;
+  color: #78350f !important;
+}
+
+/* --------------------------------------------------------------------------
+   5. EDITORIAL MONOCHROME THEME (data-theme="monochrome")
+   -------------------------------------------------------------------------- */
+[data-theme="monochrome"] body,
+[data-theme="monochrome"] .bg-zinc-100 {
+  background-color: #f9fafb !important;
+}
+
+[data-theme="monochrome"] .border-zinc-200,
+[data-theme="monochrome"] .border-zinc-300 {
+  border-color: #09090b !important;
+}
+
+[data-theme="monochrome"] .bg-indigo-950,
+[data-theme="monochrome"] .bg-indigo-600 {
+  background-color: #09090b !important;
+  color: #ffffff !important;
+}
+
+[data-theme="monochrome"] .text-indigo-600,
+[data-theme="monochrome"] .text-indigo-700,
+[data-theme="monochrome"] .text-indigo-800 {
+  color: #09090b !important;
+}
+
+/* ==========================================================================
+   PRINT MEDIA RULES (Strict Isolation for Receipts & Reports)
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 4mm 6mm;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Completely hide all dashboard elements when printing */
+  header,
+  nav,
+  aside,
+  footer,
+  main,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Hide root element completely when printing the portaled Regional Office report so page 1 begins directly with the document */
+  body.printing-intake-matrix-report #root,
+  body:has(#printable-intake-matrix-report) #root {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Reset any full-viewport heights that push content to subsequent pages */
+  #root,
+  .min-h-screen {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  /* When printing, make the modal overlay natural flow and single-page */
+  .fixed.inset-0 {
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .fixed.inset-0 > div {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #printable-receipt,
+  #printable-registration-receipt,
+  #printable-intake-matrix-report {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  #printable-intake-matrix-report table {
+    width: 100% !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  #printable-intake-matrix-report thead {
+    display: table-header-group !important;
+  }
+
+  #printable-intake-matrix-report tfoot {
+    display: table-footer-group !important;
+  }
+
+  #printable-intake-matrix-report tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+}

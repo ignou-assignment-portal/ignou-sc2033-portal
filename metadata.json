@@ -1,0 +1,8 @@
+{
+  "name": "Remix IGNOU SC-2033 Assignment Operations",
+  "description": "Institutional assignment operations management dashboard for IGNOU Study Centre 2033 with session isolation, RBAC, and master lookups.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
