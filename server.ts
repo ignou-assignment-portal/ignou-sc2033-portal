@@ -964,6 +964,184 @@ app.post("/api/sheets", async (req, res) => {
   }
 });
 
+// 4. Source File Exporter & 1-Click GitHub Push Endpoint for Live Web App Deployment
+const SYNCABLE_WORKSPACE_FILES = [
+  "src/context/AppContext.tsx",
+  "src/components/IntegrityDebuggerPanel.tsx",
+  "src/components/SystemSettingsView.tsx",
+  "src/components/RecentActivity.tsx",
+  "src/components/Header.tsx",
+  "src/App.tsx",
+  "src/services/sheetsService.ts",
+  "api/sheets.js",
+  "api/health.js",
+  "vercel.json",
+  "server.ts",
+];
+
+app.get("/api/export-source-file", (req, res) => {
+  const requestedFile = String(req.query.file || "src/context/AppContext.tsx").trim();
+  if (!SYNCABLE_WORKSPACE_FILES.includes(requestedFile)) {
+    return res.status(400).json({ error: "File not in allowed export list." });
+  }
+  const fullPath = path.join(process.cwd(), requestedFile);
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ error: `File ${requestedFile} not found.` });
+  }
+  const content = fs.readFileSync(fullPath, "utf-8");
+  if (req.query.download === "1") {
+    const fileName = path.basename(requestedFile);
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.send(content);
+  }
+  return res.json({ file: requestedFile, content });
+});
+
+app.post("/api/github-push", async (req, res) => {
+  try {
+    const token = String(req.body?.token || process.env.GITHUB_TOKEN || "").trim();
+    const repo = String(req.body?.repo || "ignou-assignment-portal/ignou-sc2033-portal")
+      .replace(/^https?:\/\/github\.com\//i, "")
+      .replace(/\.git$/i, "")
+      .trim();
+    const branch = String(req.body?.branch || "main").trim();
+    const commitMessage = String(
+      req.body?.commitMessage ||
+        "fix: restore all 46 intake entries and 208 course ledger rows + add Integrity Debugger"
+    ).trim();
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: "Please provide a GitHub Personal Access Token (with 'repo' or 'contents:write' permission).",
+      });
+    }
+
+    const ghHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "IGNOU-SC2033-Portal-Sync",
+    };
+
+    // Step 1: Get current branch reference
+    const refRes = await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${branch}`, {
+      headers: ghHeaders,
+    });
+    if (!refRes.ok) {
+      const errText = await refRes.text();
+      return res.status(refRes.status).json({
+        success: false,
+        error: `GitHub API could not read branch '${branch}' on '${repo}' (${refRes.status}): ${errText}`,
+      });
+    }
+    const refData: any = await refRes.json();
+    const latestCommitSha = refData?.object?.sha;
+
+    // Step 2: Get base tree SHA from latest commit
+    const commitRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/commits/${latestCommitSha}`,
+      { headers: ghHeaders }
+    );
+    if (!commitRes.ok) {
+      const errText = await commitRes.text();
+      return res.status(commitRes.status).json({
+        success: false,
+        error: `Failed to fetch latest commit details: ${errText}`,
+      });
+    }
+    const commitData: any = await commitRes.json();
+    const baseTreeSha = commitData?.tree?.sha;
+
+    // Step 3: Build tree items for all updated workspace files
+    const treeItems: Array<{ path: string; mode: string; type: string; content: string }> = [];
+    for (const relPath of SYNCABLE_WORKSPACE_FILES) {
+      const absPath = path.join(process.cwd(), relPath);
+      if (fs.existsSync(absPath)) {
+        treeItems.push({
+          path: relPath,
+          mode: "100644",
+          type: "blob",
+          content: fs.readFileSync(absPath, "utf-8"),
+        });
+      }
+    }
+
+    const treeRes = await fetch(`https://api.github.com/repos/${repo}/git/trees`, {
+      method: "POST",
+      headers: ghHeaders,
+      body: JSON.stringify({
+        base_tree: baseTreeSha,
+        tree: treeItems,
+      }),
+    });
+    if (!treeRes.ok) {
+      const errText = await treeRes.text();
+      return res.status(treeRes.status).json({
+        success: false,
+        error: `Failed to create Git tree on GitHub: ${errText}`,
+      });
+    }
+    const treeData: any = await treeRes.json();
+
+    // Step 4: Create commit
+    const newCommitRes = await fetch(`https://api.github.com/repos/${repo}/git/commits`, {
+      method: "POST",
+      headers: ghHeaders,
+      body: JSON.stringify({
+        message: commitMessage,
+        tree: treeData.sha,
+        parents: [latestCommitSha],
+      }),
+    });
+    if (!newCommitRes.ok) {
+      const errText = await newCommitRes.text();
+      return res.status(newCommitRes.status).json({
+        success: false,
+        error: `Failed to create commit on GitHub: ${errText}`,
+      });
+    }
+    const newCommitData: any = await newCommitRes.json();
+
+    // Step 5: Update branch ref to point to new commit
+    const updateRefRes = await fetch(
+      `https://api.github.com/repos/${repo}/git/refs/heads/${branch}`,
+      {
+        method: "PATCH",
+        headers: ghHeaders,
+        body: JSON.stringify({
+          sha: newCommitData.sha,
+          force: false,
+        }),
+      }
+    );
+    if (!updateRefRes.ok) {
+      const errText = await updateRefRes.text();
+      return res.status(updateRefRes.status).json({
+        success: false,
+        error: `Failed to update branch ref '${branch}': ${errText}`,
+      });
+    }
+
+    return res.json({
+      success: true,
+      repo,
+      branch,
+      commitSha: newCommitData.sha,
+      commitUrl: newCommitData.html_url || `https://github.com/${repo}/commit/${newCommitData.sha}`,
+      filesPushed: treeItems.map((t) => t.path),
+    });
+  } catch (err: any) {
+    console.error("[GitHub Push Error]:", err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || "Unexpected error while pushing to GitHub.",
+    });
+  }
+});
+
 async function startServer() {
   // Vite development middleware or static production serving
   if (process.env.NODE_ENV !== "production") {

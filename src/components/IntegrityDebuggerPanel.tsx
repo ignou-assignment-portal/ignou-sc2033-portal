@@ -19,6 +19,10 @@ import {
   ArrowRight,
   RotateCcw,
   Sparkles,
+  ExternalLink,
+  Copy,
+  Check,
+  UploadCloud,
 } from 'lucide-react';
 
 interface DatasetDiagnosticRow {
@@ -82,6 +86,77 @@ export const IntegrityDebuggerPanel: React.FC = () => {
   const [report, setReport] = useState<IntegrityDebugResult | null>(null);
   const [showMissingTable, setShowMissingTable] = useState(true);
   const [filterText, setFilterText] = useState('');
+
+  // Live Production Web App (GitHub -> Vercel) Sync State
+  const [githubToken, setGithubToken] = useState('');
+  const [githubRepo, setGithubRepo] = useState('ignou-assignment-portal/ignou-sc2033-portal');
+  const [isPushingGithub, setIsPushingGithub] = useState(false);
+  const [githubPushResult, setGithubPushResult] = useState<{
+    success?: boolean;
+    commitSha?: string;
+    commitUrl?: string;
+    error?: string;
+    filesPushed?: string[];
+  } | null>(null);
+  const [copiedAppContext, setCopiedAppContext] = useState(false);
+
+  const handleCopyFixedAppContext = async () => {
+    try {
+      const res = await fetch('/api/export-source-file?file=src/context/AppContext.tsx');
+      if (!res.ok) throw new Error('Failed to fetch source file');
+      const data = await res.json();
+      await navigator.clipboard.writeText(data.content);
+      setCopiedAppContext(true);
+      showToast('Copied fixed AppContext.tsx to clipboard!', 'success');
+      setTimeout(() => setCopiedAppContext(false), 3000);
+    } catch {
+      showToast('Could not copy file. Use the Download button instead.', 'error');
+    }
+  };
+
+  const handlePushToGithub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!githubToken.trim()) {
+      showToast('Please enter a GitHub Personal Access Token.', 'warning');
+      return;
+    }
+    setIsPushingGithub(true);
+    setGithubPushResult(null);
+    try {
+      const res = await fetch('/api/github-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: githubToken.trim(),
+          repo: githubRepo.trim(),
+          branch: 'main',
+          commitMessage:
+            'fix: restore all 46 intake entries and 208 course ledger rows + add Integrity Debugger',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGithubPushResult(data);
+        showToast(
+          'Pushed to GitHub! Vercel is now deploying the 46/208 fix to your live web app.',
+          'success'
+        );
+      } else {
+        setGithubPushResult({
+          success: false,
+          error: data.error || 'Failed to push to GitHub.',
+        });
+        showToast(data.error || 'GitHub push failed.', 'error');
+      }
+    } catch (err: any) {
+      setGithubPushResult({
+        success: false,
+        error: err?.message || 'Network error while pushing to GitHub.',
+      });
+    } finally {
+      setIsPushingGithub(false);
+    }
+  };
 
   const runIntegrityVerification = useCallback(async () => {
     setIsRunning(true);
@@ -1169,6 +1244,190 @@ export const IntegrityDebuggerPanel: React.FC = () => {
                 )}
               </div>
             )}
+
+            {/* Live Production Web App (GitHub -> Vercel) Sync Toolkit */}
+            <div className="border border-indigo-200 bg-indigo-50/40 rounded-xl p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-indigo-200/70">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                    <UploadCloud className="w-4 h-4 text-indigo-600" />
+                    <span>
+                      Update Live Production Web App (ignou-sc2033-portal.vercel.app)
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    AI Studio Preview already runs the fixed code (46 Intakes &amp; 208 Courses). To update your deployed Vercel web app, push the fixed code to{' '}
+                    <span className="font-mono text-indigo-800 font-semibold">
+                      ignou-assignment-portal/ignou-sc2033-portal
+                    </span>{' '}
+                    using either Option A (Zero-Token 15-Second Upload) or Option B (1-Click API Push).
+                  </p>
+                </div>
+                <a
+                  href="https://ignou-sc2033-portal.vercel.app/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0 transition"
+                >
+                  <span>Open Live Vercel App</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Option A: Zero-Token 2-Click GitHub Web Upload */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900">
+                      Option A: Zero-Token GitHub Browser Upload (Recommended)
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-700 font-semibold">
+                      No Token Needed · 15s
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    1. Download the fixed <code className="font-mono text-slate-900">AppContext.tsx</code> file below.
+                    <br />
+                    2. Click <strong>Open GitHub Upload Page</strong>, drag-and-drop{' '}
+                    <code className="font-mono text-slate-900">AppContext.tsx</code>, and click{' '}
+                    <strong>Commit changes</strong>. Vercel will automatically rebuild and deploy all 46 intakes and 208 courses.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <a
+                      href="/api/export-source-file?file=src/context/AppContext.tsx&download=1"
+                      download="AppContext.tsx"
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>1. Download Fixed AppContext.tsx</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyFixedAppContext}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    >
+                      {copiedAppContext ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-slate-600" />
+                      )}
+                      <span>{copiedAppContext ? 'Copied!' : 'Copy Code'}</span>
+                    </button>
+
+                    <a
+                      href="https://github.com/ignou-assignment-portal/ignou-sc2033-portal/upload/main/src/context"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition whitespace-nowrap"
+                    >
+                      <span>2. Open GitHub Upload Page</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Option B: 1-Click Automated GitHub API Push */}
+                <form
+                  onSubmit={handlePushToGithub}
+                  className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900">
+                      Option B: 1-Click Automated GitHub API Push
+                    </span>
+                    <span className="text-[10px] font-mono text-indigo-700 font-semibold">
+                      Pushes All 11 Updated Files
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                        Target GitHub Repository
+                      </label>
+                      <input
+                        type="text"
+                        value={githubRepo}
+                        onChange={(e) => setGithubRepo(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs text-slate-800"
+                        placeholder="owner/repo"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">
+                        GitHub Personal Access Token (repo scope)
+                      </label>
+                      <input
+                        type="password"
+                        value={githubToken}
+                        onChange={(e) => setGithubToken(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs text-slate-800"
+                        placeholder="ghp_... or github_pat_..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo&description=IGNOU-SC2033-Portal-Deploy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-semibold text-indigo-600 hover:underline flex items-center gap-1"
+                    >
+                      <span>Generate GitHub Token</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+
+                    <button
+                      type="submit"
+                      disabled={isPushingGithub}
+                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    >
+                      <UploadCloud className={`w-3.5 h-3.5 ${isPushingGithub ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {isPushingGithub ? 'Pushing to GitHub...' : 'Push All Files to GitHub'}
+                      </span>
+                    </button>
+                  </div>
+
+                  {githubPushResult && (
+                    <div
+                      className={`p-2.5 rounded-lg border text-xs ${
+                        githubPushResult.success
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                          : 'bg-rose-50 border-rose-200 text-rose-900'
+                      }`}
+                    >
+                      {githubPushResult.success ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <span>
+                            Successfully pushed {githubPushResult.filesPushed?.length} files! Commit:{' '}
+                            <strong className="font-mono">
+                              {githubPushResult.commitSha?.slice(0, 7)}
+                            </strong>
+                          </span>
+                          {githubPushResult.commitUrl && (
+                            <a
+                              href={githubPushResult.commitUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold text-emerald-800 underline flex items-center gap-1 shrink-0"
+                            >
+                              <span>View Commit</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <span>{githubPushResult.error}</span>
+                      )}
+                    </div>
+                  )}
+                </form>
+              </div>
+            </div>
           </>
         ) : null}
       </div>
