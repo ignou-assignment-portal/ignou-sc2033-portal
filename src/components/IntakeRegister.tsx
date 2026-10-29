@@ -38,8 +38,10 @@ export const IntakeRegister: React.FC = () => {
     isAdmin,
     verifyAndSetAdminRole,
     showToast,
+    reconcileIntakeAndCourseLedger,
   } = useApp();
 
+  const [viewScope, setViewScope] = useState<'ALL' | 'SESSION'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedMode, setSelectedMode] = useState<string>('ALL');
@@ -138,8 +140,12 @@ export const IntakeRegister: React.FC = () => {
 
   const normalizeSession = (s: any) => norm(s);
   const sessionRecords = useMemo(() => {
+    if (viewScope === 'ALL') {
+      const all = (allIntakes && allIntakes.length > 0) ? allIntakes : (intakeRegister && intakeRegister.length > 0 ? intakeRegister : sessionIntakes);
+      return all;
+    }
     return sessionIntakes;
-  }, [sessionIntakes]);
+  }, [viewScope, allIntakes, intakeRegister, sessionIntakes]);
 
   // Filtered records supporting both snake_case and camelCase keys
   const filteredRecords = useMemo(() => {
@@ -280,7 +286,7 @@ export const IntakeRegister: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      {/* Session Isolation Banner */}
+      {/* Session Isolation & Scope Banner */}
       <div className="bg-white border border-zinc-200 rounded-xl p-4 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
@@ -288,14 +294,15 @@ export const IntakeRegister: React.FC = () => {
           </div>
           <div>
             <div className="font-bold text-zinc-900 flex items-center gap-2">
-              <span>Intake Register (Strict Session Isolated)</span>
+              <span>Intake Register</span>
               <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-mono">
-                {currentSession}
+                {viewScope === 'ALL' ? 'All Active Receipts' : currentSession}
               </span>
             </div>
             <p className="text-zinc-500 mt-0.5">
-              Displaying records exclusively for <strong className="text-zinc-700">{currentSession}</strong> ({sessionIntakes.length} total).
-              {Object.keys(otherSessionCounts).length > 0 && (
+              Displaying <strong className="text-zinc-800">{filteredRecords.length}</strong> receipts
+              {viewScope === 'ALL' ? ` across all academic cycles (All ${allIntakes.length || sessionIntakes.length} Loaded)` : ` isolated for ${currentSession}`}
+              {viewScope === 'SESSION' && Object.keys(otherSessionCounts).length > 0 && (
                 <span className="text-zinc-400 ml-1">
                   (Other cycles: {Object.entries(otherSessionCounts).map(([s, count]) => `${s}: ${count}`).join(' | ')})
                 </span>
@@ -304,13 +311,52 @@ export const IntakeRegister: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Scope Switcher: All (46) vs Current Cycle */}
+          <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+            <button
+              type="button"
+              onClick={() => setViewScope('ALL')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                viewScope === 'ALL'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title="Show all intake receipts loaded from Google Sheets (e.g. all 46 receipts)"
+            >
+              All Receipts ({allIntakes.length || sessionIntakes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewScope('SESSION')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                viewScope === 'SESSION'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title={`Filter strictly for ${currentSession}`}
+            >
+              {currentSession} ({sessionIntakes.length})
+            </button>
+          </div>
+
+          {/* Autonomous Data Governance: Reconcile & Restore Scripts Button */}
+          <button
+            type="button"
+            onClick={() => reconcileIntakeAndCourseLedger()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition shadow-2xs cursor-pointer"
+            title="Scan all intake receipts, audit course ledger parity, and automatically unpack any missing scripts"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Reconcile & Unpack Scripts</span>
+          </button>
+
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg font-semibold transition border border-zinc-300 shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg font-semibold transition border border-zinc-300 shadow-2xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export Register (.CSV)</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>

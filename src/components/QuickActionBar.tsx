@@ -11,13 +11,7 @@ import {
   Sparkles,
   RefreshCw,
   Calendar,
-  Layers,
-  ChevronRight,
-  FileSpreadsheet,
-  Cloud,
 } from 'lucide-react';
-import { SheetDataEntryGuideModal } from './SheetDataEntryGuideModal';
-import { DeploymentGuideModal } from './DeploymentGuideModal';
 import { formatDate } from '../utils/helpers';
 import { IntakeRecord } from '../types';
 
@@ -41,9 +35,6 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
     syncStatus,
     isAdmin,
   } = useApp();
-
-  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
-  const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
 
   // Compute Today's Date String
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -174,32 +165,6 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
             </div>
           )}
 
-          {/* Google Sheets Data Entry Guide & Samarth Converter */}
-          <div className="pl-2 border-l border-slate-200 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsGuideModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 text-xs font-bold transition cursor-pointer shadow-2xs"
-              title="Open Google Sheets Data Entry Guide, Sample Templates & Samarth Paste Cleaner"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-              <span className="hidden sm:inline font-sans text-[11px]">Sheet Guide</span>
-            </button>
-          </div>
-
-          {/* GitHub & Vercel Deployment Hub */}
-          <div className="pl-2 border-l border-slate-200 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsDeploymentModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 text-xs font-bold transition cursor-pointer shadow-2xs"
-              title="Open GitHub & Vercel Deployment Hub, Git Commands & Configuration Files"
-            >
-              <Cloud className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-              <span className="hidden sm:inline font-sans text-[11px]">Deploy (Vercel)</span>
-            </button>
-          </div>
-
           {/* Google Sheets Sync Telemetry Launcher (Coordinator / Admin Only) */}
           {isAdmin && (
             <div className="pl-2 border-l border-slate-200 shrink-0">
@@ -220,18 +185,6 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
           )}
         </div>
       </div>
-
-      {/* Sheet Data Entry Guide Modal */}
-      <SheetDataEntryGuideModal
-        isOpen={isGuideModalOpen}
-        onClose={() => setIsGuideModalOpen(false)}
-      />
-
-      {/* GitHub & Vercel Deployment Hub Modal */}
-      <DeploymentGuideModal
-        isOpen={isDeploymentModalOpen}
-        onClose={() => setIsDeploymentModalOpen(false)}
-      />
     </div>
   );
 };

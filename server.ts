@@ -966,6 +966,7 @@ app.post("/api/sheets", async (req, res) => {
 
 // 4. Source File Exporter & 1-Click GitHub Push Endpoint for Live Web App Deployment
 const SYNCABLE_WORKSPACE_FILES = [
+  "package.json",
   "src/context/AppContext.tsx",
   "src/components/IntegrityDebuggerPanel.tsx",
   "src/components/SystemSettingsView.tsx",

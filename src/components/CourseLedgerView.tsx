@@ -21,13 +21,17 @@ export const CourseLedgerView: React.FC = () => {
     currentSession,
     sessionIntakes,
     sessionCourseEvaluations,
+    allIntakes,
+    allCourseEvaluations,
     sessionPackets,
     evaluators,
     createPacket,
     updatePacket,
     isAdmin,
+    reconcileIntakeAndCourseLedger,
   } = useApp();
 
+  const [ledgerScope, setLedgerScope] = useState<'ALL' | 'SESSION'>('ALL');
   const [isPacketModalOpen, setIsPacketModalOpen] = useState(false);
   const [selectedCourseForPacket, setSelectedCourseForPacket] = useState('');
   const [selectedEvaluatorId, setSelectedEvaluatorId] = useState('');
@@ -35,8 +39,15 @@ export const CourseLedgerView: React.FC = () => {
   const [expectedReturnDate, setExpectedReturnDate] = useState('');
   const [packetNotes, setPacketNotes] = useState('');
 
-  // Course aggregation summary for active session
+  // Course aggregation summary based on selected ledgerScope
   const courseLedger = useMemo(() => {
+    const activeIntakes = ledgerScope === 'ALL'
+      ? (allIntakes && allIntakes.length > 0 ? allIntakes : sessionIntakes)
+      : sessionIntakes;
+    const activeEvaluations = ledgerScope === 'ALL'
+      ? (allCourseEvaluations && allCourseEvaluations.length > 0 ? allCourseEvaluations : sessionCourseEvaluations)
+      : sessionCourseEvaluations;
+
     const map = new Map<
       string,
       {
@@ -49,8 +60,8 @@ export const CourseLedgerView: React.FC = () => {
       }
     >();
 
-    // Scan all intakes in this session
-    sessionIntakes.forEach((intake: any) => {
+    // Scan all intakes in selected scope
+    activeIntakes.forEach((intake: any) => {
       const courses = intake.courseCodes || intake.courses || [];
       if (Array.isArray(courses)) {
         courses.forEach((rawCode: string) => {
@@ -73,7 +84,7 @@ export const CourseLedgerView: React.FC = () => {
           if (hasMark) {
             item.evaluated++;
           } else {
-            const matchingEval = sessionCourseEvaluations.find(
+            const matchingEval = activeEvaluations.find(
               (e: any) =>
                 (e.enrollmentNo === intake.enrollmentNo || e.Enrollment_No === intake.enrollmentNo) &&
                 (e.courseCode === code || e.Course_Code === code)
@@ -88,8 +99,8 @@ export const CourseLedgerView: React.FC = () => {
       }
     });
 
-    // Also ensure every course in sessionCourseEvaluations is registered
-    sessionCourseEvaluations.forEach((evalItem: any) => {
+    // Also ensure every course in activeEvaluations is registered
+    activeEvaluations.forEach((evalItem: any) => {
       const code = (evalItem.courseCode || evalItem.Course_Code || '').trim().toUpperCase();
       if (!code) return;
       if (!map.has(code)) {
@@ -178,28 +189,72 @@ export const CourseLedgerView: React.FC = () => {
             </h2>
           </div>
           <p className="text-xs text-zinc-500 mt-1">
-            Aggregated course-wise ledger for session <strong className="text-zinc-800">{currentSession}</strong>. Form packets, assign approved academic counselors, and monitor return turnaround.
+            Aggregated course-wise ledger.
+            {ledgerScope === 'ALL'
+              ? ` Viewing all courses across cycles (${allCourseEvaluations.length || sessionCourseEvaluations.length} total scripts loaded).`
+              : ` Isolated for session ${currentSession} (${sessionCourseEvaluations.length} scripts).`}
           </p>
         </div>
 
-        {!isAdmin && (
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
-            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>Read-Only: Packet formation restricted to Coordinator (Admin).</span>
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Scope Switcher: All (208) vs Current Session */}
+          <div className="flex items-center bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+            <button
+              type="button"
+              onClick={() => setLedgerScope('ALL')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                ledgerScope === 'ALL'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title="Show all scripts across all cycles (e.g. all 208 scripts)"
+            >
+              All Courses ({allCourseEvaluations.length || sessionCourseEvaluations.length} Scripts)
+            </button>
+            <button
+              type="button"
+              onClick={() => setLedgerScope('SESSION')}
+              className={`px-2.5 py-1 text-xs font-bold rounded-md transition cursor-pointer ${
+                ledgerScope === 'SESSION'
+                  ? 'bg-indigo-600 text-white shadow-2xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+              title={`Filter strictly for ${currentSession}`}
+            >
+              {currentSession} ({sessionCourseEvaluations.length})
+            </button>
           </div>
-        )}
+
+          {/* Autonomous Data Governance: Reconcile Button */}
+          <button
+            type="button"
+            onClick={() => reconcileIntakeAndCourseLedger()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs transition shadow-2xs cursor-pointer"
+            title="Scan and verify all intake receipts vs course ledger rows, restoring any missing scripts automatically"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Reconcile & Restore Scripts</span>
+          </button>
+
+          {!isAdmin && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Read-Only</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Course Aggregation Cards / Table */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 bg-zinc-50 border-b border-zinc-200 flex items-center justify-between">
           <div className="font-bold text-xs text-zinc-800 uppercase tracking-wider">
-            Active Courses Ledger ({courseLedger.length} Courses in {currentSession})
+            Active Courses Ledger ({courseLedger.length} Distinct Courses)
           </div>
           <span className="text-[11px] text-zinc-500">
-            Total Session Scripts:{' '}
+            Total Evaluated / Received Scripts:{' '}
             <strong className="text-zinc-900">
-              {courseLedger.reduce((sum, c) => sum + c.totalReceived, 0)}
+              {courseLedger.reduce((sum, c) => sum + c.totalReceived, 0)} Scripts
             </strong>
           </span>
         </div>

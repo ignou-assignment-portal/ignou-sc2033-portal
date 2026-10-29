@@ -7,8 +7,9 @@ import { AppsScriptSetupModal } from './AppsScriptSetupModal';
 import { CentreInstallAppBanner } from './CentreInstallAppBanner';
 import { NewDatabaseSetupWizard } from './NewDatabaseSetupWizard';
 import { SheetDataEntryGuideModal } from './SheetDataEntryGuideModal';
+import { DeploymentGuideModal } from './DeploymentGuideModal';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/helpers';
-import { SessionArchiveRecord, RbacOperation, RbacAccessLevel } from '../types';
+import { SessionArchiveRecord, RbacOperation, RbacAccessLevel, SheetUserAccount } from '../types';
 import {
   Settings,
   Building2,
@@ -54,11 +55,14 @@ import {
   SlidersHorizontal,
   Code,
   Copy,
+  Plus,
+  Pencil,
+  UserPlus,
 } from 'lucide-react';
 import { OFFICIAL_APPS_SCRIPT_CODE, SCRIPT_URL } from '../services/sheetsService';
 import { IntegrityDebuggerPanel } from './IntegrityDebuggerPanel';
 
-type SettingsTabId = 'general' | 'appearance' | 'rates' | 'sync' | 'debugger' | 'rbac';
+type SettingsTabId = 'general' | 'appearance' | 'rates' | 'sync' | 'users' | 'debugger' | 'rbac';
 
 export const SystemSettingsView: React.FC = () => {
   const {
@@ -116,6 +120,13 @@ export const SystemSettingsView: React.FC = () => {
     customAppsScriptUrl,
     setCustomAppsScriptUrl,
     testCustomConnection,
+    sheetUsers,
+    saveSheetUser,
+    deleteSheetUser,
+    reconcileIntakeAndCourseLedger,
+    lastDiscrepancyReport,
+    allCourseEvaluations,
+    manualInjectRecord,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
@@ -124,6 +135,35 @@ export const SystemSettingsView: React.FC = () => {
   const [purgeConfirmText, setPurgeConfirmText] = useState('');
   const [isPurging, setIsPurging] = useState(false);
   const [backupBeforePurge, setBackupBeforePurge] = useState(true);
+
+  // Modals for Reference Guides (moved from top bar to Settings)
+  const [isSheetGuideModalOpen, setIsSheetGuideModalOpen] = useState(false);
+  const [isDeploymentGuideModalOpen, setIsDeploymentGuideModalOpen] = useState(false);
+
+  // Google Sheets Users Management Modal State
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<SheetUserAccount | null>(null);
+  const [userForm, setUserForm] = useState({
+    username: '',
+    password: '',
+    fullName: '',
+    email: '',
+    role: 'desk' as 'admin' | 'desk',
+    status: 'active' as 'active' | 'inactive',
+  });
+
+  // Manual Record Injector State
+  const [isManualInjectModalOpen, setIsManualInjectModalOpen] = useState(false);
+  const [injectType, setInjectType] = useState<'intake' | 'evaluation'>('intake');
+  const [injectForm, setInjectForm] = useState({
+    studentName: '',
+    enrollmentNo: '',
+    programmeCode: 'MEG',
+    courseCode: '',
+    courses: '',
+    session: currentSession,
+    marks: '',
+  });
 
   // Helper to suggest next academic cycle
   const getSuggestedNextSession = (curr: string) => {
@@ -457,6 +497,96 @@ export const SystemSettingsView: React.FC = () => {
     downloadAnchor.remove();
   };
 
+  const handleOpenAddUser = () => {
+    setEditingUser(null);
+    setUserForm({
+      username: '',
+      password: '',
+      fullName: '',
+      email: '',
+      role: 'desk',
+      status: 'active',
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const handleOpenEditUser = (user: SheetUserAccount) => {
+    setEditingUser(user);
+    setUserForm({
+      username: user.username,
+      password: user.password,
+      fullName: user.fullName || '',
+      email: user.email || '',
+      role: user.role,
+      status: user.status || 'active',
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userForm.username.trim() || !userForm.password.trim()) {
+      showToast('Username and password are required', 'error');
+      return;
+    }
+    const acc: SheetUserAccount = {
+      username: userForm.username.trim(),
+      password: userForm.password.trim(),
+      role: userForm.role,
+      fullName: userForm.fullName.trim() || userForm.username.trim(),
+      email: userForm.email.trim(),
+      status: userForm.status,
+    };
+    await saveSheetUser(acc);
+    setIsUserModalOpen(false);
+  };
+
+  const handleDeleteUser = async (username: string) => {
+    if (window.confirm(`Are you sure you want to delete staff account '${username}'?`)) {
+      await deleteSheetUser(username);
+    }
+  };
+
+  const handleExecuteManualInject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (injectType === 'intake') {
+      if (!injectForm.enrollmentNo.trim() || !injectForm.courses.trim()) {
+        showToast('Enrollment No and Courses are required', 'error');
+        return;
+      }
+      manualInjectRecord('intake', {
+        enrollmentNo: injectForm.enrollmentNo.trim(),
+        studentName: injectForm.studentName.trim() || 'Direct Injected Student',
+        programmeCode: injectForm.programmeCode.trim().toUpperCase() || 'MEG',
+        courseCodes: injectForm.courses.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+        session: injectForm.session || currentSession,
+      });
+    } else {
+      if (!injectForm.enrollmentNo.trim() || !injectForm.courseCode.trim()) {
+        showToast('Enrollment No and Course Code are required', 'error');
+        return;
+      }
+      manualInjectRecord('evaluation', {
+        enrollmentNo: injectForm.enrollmentNo.trim(),
+        studentName: injectForm.studentName.trim() || 'Direct Injected Student',
+        programmeCode: injectForm.programmeCode.trim().toUpperCase() || 'MEG',
+        courseCode: injectForm.courseCode.trim().toUpperCase(),
+        session: injectForm.session || currentSession,
+        marks: injectForm.marks ? Number(injectForm.marks) : undefined,
+      });
+    }
+    setIsManualInjectModalOpen(false);
+    setInjectForm({
+      studentName: '',
+      enrollmentNo: '',
+      programmeCode: 'MEG',
+      courseCode: '',
+      courses: '',
+      session: currentSession,
+      marks: '',
+    });
+  };
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Banner */}
@@ -545,6 +675,23 @@ export const SystemSettingsView: React.FC = () => {
               {pendingSyncQueue.length}
             </span>
           )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('users')}
+          id="btn-settings-tab-users"
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'users'
+              ? 'bg-white text-indigo-950 shadow-xs border border-zinc-200'
+              : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50'
+          }`}
+        >
+          <Users className={`w-4 h-4 ${activeTab === 'users' ? 'text-indigo-600' : 'text-zinc-500'}`} />
+          <span>Users (Google Sheets)</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            {sheetUsers.length}
+          </span>
         </button>
 
         <button
@@ -1268,6 +1415,125 @@ export const SystemSettingsView: React.FC = () => {
             </div>
           </div>
 
+          {/* Autonomous Data Governance & Discrepancy Reconciliation Suite */}
+          <div className="bg-white border border-indigo-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-100 gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-bold text-base text-zinc-900">
+                    Self-Service Data Governance & Discrepancy Reconciliation
+                  </h3>
+                  <span className="text-[10px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold">
+                    Autonomous Fix
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Full self-service toolkit to audit, reconcile missing courses, unpack scripts across all 46 receipts, and inject records without needing code modifications.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => reconcileIntakeAndCourseLedger()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Audits all intake receipts and auto-unpacks missing course evaluations into Course Ledger"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reconcile & Unpack All Scripts</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsManualInjectModalOpen(true)}
+                  className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  title="Directly insert an intake receipt or course evaluation record"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Manual Record Injection</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Reconciliation Live Census */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                <div className="text-[10px] text-zinc-500 uppercase font-semibold">Total Intake Receipts</div>
+                <div className="text-base font-black text-zinc-900 font-mono mt-0.5 flex items-baseline gap-2">
+                  <span>{allIntakes.length} Loaded</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">({sessionIntakes.length} in active session)</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                <div className="text-[10px] text-zinc-500 uppercase font-semibold">Course Ledger Scripts</div>
+                <div className="text-base font-black text-zinc-900 font-mono mt-0.5 flex items-baseline gap-2">
+                  <span>{allCourseEvaluations.length} Loaded</span>
+                  <span className="text-[10px] text-zinc-400 font-normal">({sessionCourseEvaluations.length} in active session)</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl">
+                <div className="text-[10px] text-emerald-800 uppercase font-semibold">Parity & Integrity</div>
+                <div className="text-sm font-bold text-emerald-900 mt-0.5 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Full View Available (All Receipts & Scripts)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Last Discrepancy Audit Report */}
+            {lastDiscrepancyReport && (
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-950 space-y-1.5">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    <span>Last Discrepancy Audit & Reconciliation Report</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-indigo-600 font-normal">
+                    {formatDateTime(lastDiscrepancyReport.timestamp || lastDiscrepancyReport.lastReconciledAt || new Date().toISOString())}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] pt-1">
+                  <div className="bg-white/80 p-1.5 rounded border border-indigo-100">
+                    Receipts Audited: <strong>{lastDiscrepancyReport.intakesChecked ?? lastDiscrepancyReport.totalIntakes}</strong>
+                  </div>
+                  <div className="bg-white/80 p-1.5 rounded border border-indigo-100">
+                    Evaluations Verified: <strong>{lastDiscrepancyReport.evaluationsAudited ?? lastDiscrepancyReport.totalCourseEvaluations}</strong>
+                  </div>
+                  <div className="bg-white/80 p-1.5 rounded border border-indigo-100 text-emerald-700">
+                    Missing Restored: <strong>{lastDiscrepancyReport.missingRestored ?? lastDiscrepancyReport.missingScriptsCount}</strong>
+                  </div>
+                  <div className="bg-white/80 p-1.5 rounded border border-indigo-100 text-zinc-600">
+                    Duplicates Trimmed: <strong>{lastDiscrepancyReport.duplicatesTrimmed ?? lastDiscrepancyReport.fixedCount}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Reference Guide Launchers */}
+            <div className="pt-2 border-t border-zinc-100 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSheetGuideModalOpen(true)}
+                className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-zinc-200"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-600" />
+                <span>Google Sheet Data Entry Guide</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDeploymentGuideModalOpen(true)}
+                className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-zinc-200"
+              >
+                <Code className="w-3.5 h-3.5 text-zinc-600" />
+                <span>Vercel Deployment & Env Setup Guide</span>
+              </button>
+            </div>
+          </div>
+
           {/* Integrity Debugger Tool (Raw Sheet vs. Processed App Rows Verification & Auto-Fix) */}
           <IntegrityDebuggerPanel />
 
@@ -1900,6 +2166,173 @@ export const SystemSettingsView: React.FC = () => {
         </div>
       )}
 
+      {/* TAB: USERS (GOOGLE SHEETS USER ACCOUNTS) */}
+      {activeTab === 'users' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 gap-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-bold text-base text-zinc-900">
+                    Google Sheets Staff & Admin User Accounts
+                  </h3>
+                  <span className="text-[10px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold">
+                    'Users' Sheet Tab
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-500">
+                  Staff credentials configured in your connected Google Sheet (<code className="font-mono text-zinc-700 bg-zinc-100 px-1 py-0.5 rounded">Users</code> tab). Staff and coordinators can authenticate directly with these credentials.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddUser}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Add Staff Account</span>
+                </button>
+              )}
+            </div>
+
+            {/* Account statistics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                <div className="text-[10px] text-zinc-500 uppercase font-semibold">Total Accounts</div>
+                <div className="text-base font-black text-zinc-900 font-mono mt-0.5">
+                  {sheetUsers.length}
+                </div>
+              </div>
+              <div className="p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl">
+                <div className="text-[10px] text-indigo-700 uppercase font-semibold">Admins (Coordinators)</div>
+                <div className="text-base font-black text-indigo-950 font-mono mt-0.5">
+                  {sheetUsers.filter((u) => u.role === 'admin').length}
+                </div>
+              </div>
+              <div className="p-3 bg-teal-50/50 border border-teal-200 rounded-xl">
+                <div className="text-[10px] text-teal-700 uppercase font-semibold">Desk Counter Staff</div>
+                <div className="text-base font-black text-teal-950 font-mono mt-0.5">
+                  {sheetUsers.filter((u) => u.role === 'desk').length}
+                </div>
+              </div>
+              <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl">
+                <div className="text-[10px] text-emerald-700 uppercase font-semibold">Active Status</div>
+                <div className="text-base font-black text-emerald-950 font-mono mt-0.5">
+                  {sheetUsers.filter((u) => u.status !== 'inactive').length}
+                </div>
+              </div>
+            </div>
+
+            {/* Users Table */}
+            <div className="border border-zinc-200 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-zinc-50 text-zinc-700 uppercase text-[10px] font-bold border-b border-zinc-200">
+                    <tr>
+                      <th className="py-2.5 px-3">Username</th>
+                      <th className="py-2.5 px-3">Full Name</th>
+                      <th className="py-2.5 px-3">Assigned Role</th>
+                      <th className="py-2.5 px-3">Email Address</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200">
+                    {sheetUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-zinc-400 italic">
+                          No accounts found. Click "Add Staff Account" or configure the "Users" tab in Google Sheets.
+                        </td>
+                      </tr>
+                    ) : (
+                      sheetUsers.map((user) => (
+                        <tr key={user.username} className="hover:bg-zinc-50/70 transition">
+                          <td className="py-2.5 px-3 font-mono font-bold text-zinc-900">
+                            {user.username}
+                          </td>
+                          <td className="py-2.5 px-3 text-zinc-800 font-medium">
+                            {user.fullName || user.username}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                user.role === 'admin'
+                                  ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                                  : 'bg-teal-100 text-teal-900 border border-teal-200'
+                              }`}
+                            >
+                              {user.role === 'admin' ? 'Coordinator (Admin)' : 'Intake Desk Staff'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-zinc-600 font-mono text-[11px]">
+                            {user.email || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                user.status === 'inactive'
+                                  ? 'bg-zinc-200 text-zinc-700'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}
+                            >
+                              {user.status === 'inactive' ? 'Inactive' : 'Active'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditUser(user)}
+                                    className="p-1.5 text-zinc-600 hover:text-indigo-600 hover:bg-zinc-100 rounded-lg transition cursor-pointer"
+                                    title="Edit user credentials"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUser(user.username)}
+                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                    title="Delete user"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Google Sheets Users Schema Note */}
+            <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-2 text-xs">
+              <div className="font-bold text-zinc-800 flex items-center gap-1.5">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Google Sheets Schema Specification for "Users" Tab</span>
+              </div>
+              <p className="text-zinc-600 leading-relaxed text-[11px]">
+                In your Google Spreadsheet, create a sheet tab named <code className="font-bold text-zinc-800 bg-white px-1.5 py-0.5 rounded border border-zinc-300">Users</code> with the following column headers in Row 1:
+              </p>
+              <div className="p-2.5 bg-white border border-zinc-200 rounded-lg font-mono text-[11px] text-zinc-800 overflow-x-auto">
+                Username | Password | Role | Full Name | Email | Status
+              </div>
+              <p className="text-zinc-500 text-[10px]">
+                * Role must be either <code>admin</code> (Coordinator full access) or <code>desk</code> (Intake Staff counter mode). Changes saved here are written back to Google Sheets automatically. Emergency PINs (<code>2033</code> / <code>1001</code>) are always kept active as an offline fail-safe.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TAB 5: INTEGRITY DEBUGGER (RAW SHEET VS. APP STATE VERIFICATION) */}
       {activeTab === 'debugger' && (
         <div className="space-y-6 animate-in fade-in duration-200">
@@ -2261,9 +2694,289 @@ export const SystemSettingsView: React.FC = () => {
 
       {/* Sheet Data Entry Guide & Samarth Converter Modal */}
       <SheetDataEntryGuideModal
-        isOpen={isGuideModalOpen}
-        onClose={() => setIsGuideModalOpen(false)}
+        isOpen={isGuideModalOpen || isSheetGuideModalOpen}
+        onClose={() => {
+          setIsGuideModalOpen(false);
+          setIsSheetGuideModalOpen(false);
+        }}
       />
+
+      {/* Deployment & Environment Setup Guide Modal */}
+      <DeploymentGuideModal
+        isOpen={isDeploymentGuideModalOpen}
+        onClose={() => setIsDeploymentGuideModalOpen(false)}
+      />
+
+      {/* GOOGLE SHEETS USER MODAL */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-zinc-200 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-zinc-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-sm">
+                  {editingUser ? 'Edit Staff User Account' : 'Add New Staff User Account'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUserModalOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Username (Login ID)</label>
+                <input
+                  type="text"
+                  required
+                  disabled={!!editingUser}
+                  value={userForm.username}
+                  onChange={(e) =>
+                    setUserForm({ ...userForm, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })
+                  }
+                  placeholder="e.g. sant_gupta or desk_operator1"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono font-bold bg-zinc-50 disabled:opacity-75 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Password</label>
+                <input
+                  type="text"
+                  required
+                  value={userForm.password}
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                  placeholder="Enter secure password"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={userForm.fullName}
+                  onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })}
+                  placeholder="e.g. Dr. Sant Kumar Gupta"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={userForm.email}
+                  onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                  placeholder="e.g. sant.k.gupta@gmail.com"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Role</label>
+                  <select
+                    value={userForm.role}
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as 'admin' | 'desk' })}
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-bold bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="admin">Coordinator (Admin)</option>
+                    <option value="desk">Intake Desk Staff</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Status</label>
+                  <select
+                    value={userForm.status}
+                    onChange={(e) => setUserForm({ ...userForm, status: e.target.value as 'active' | 'inactive' })}
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-bold bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsUserModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition cursor-pointer shadow-xs"
+                >
+                  {editingUser ? 'Save Changes' : 'Create User'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MANUAL RECORD INJECTION MODAL */}
+      {isManualInjectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-zinc-200 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-zinc-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="font-bold text-sm">Self-Service Manual Record Injection</h3>
+                  <p className="text-[11px] text-zinc-400">Directly add Intake Receipt or Course Ledger row to resolve data gaps</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManualInjectModalOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteManualInject} className="p-5 space-y-3.5 text-xs">
+              <div className="flex rounded-xl bg-zinc-100 p-1 border border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => setInjectType('intake')}
+                  className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                    injectType === 'intake' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-600'
+                  }`}
+                >
+                  Intake Receipt (Student Submission)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInjectType('evaluation')}
+                  className={`flex-1 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                    injectType === 'evaluation' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-600'
+                  }`}
+                >
+                  Course Ledger Script Row
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Enrollment Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={injectForm.enrollmentNo}
+                    onChange={(e) => setInjectForm({ ...injectForm, enrollmentNo: e.target.value.trim() })}
+                    placeholder="e.g. 2351234567"
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Student Name</label>
+                  <input
+                    type="text"
+                    value={injectForm.studentName}
+                    onChange={(e) => setInjectForm({ ...injectForm, studentName: e.target.value })}
+                    placeholder="Candidate Name"
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Programme Code</label>
+                  <input
+                    type="text"
+                    value={injectForm.programmeCode}
+                    onChange={(e) => setInjectForm({ ...injectForm, programmeCode: e.target.value.toUpperCase() })}
+                    placeholder="e.g. MEG, BAG, BCOMG"
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Academic Session</label>
+                  <input
+                    type="text"
+                    value={injectForm.session}
+                    onChange={(e) => setInjectForm({ ...injectForm, session: e.target.value })}
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {injectType === 'intake' ? (
+                <div>
+                  <label className="block font-semibold text-zinc-700 mb-1">Course Codes (comma-separated) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={injectForm.courses}
+                    onChange={(e) => setInjectForm({ ...injectForm, courses: e.target.value.toUpperCase() })}
+                    placeholder="e.g. MEG-01, MEG-02, MEG-03"
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-1 block">
+                    Will create a student intake receipt and automatically unpack each course into Course Ledger.
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-700 mb-1">Single Course Code *</label>
+                    <input
+                      type="text"
+                      required
+                      value={injectForm.courseCode}
+                      onChange={(e) => setInjectForm({ ...injectForm, courseCode: e.target.value.toUpperCase() })}
+                      placeholder="e.g. MEG-01"
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-zinc-700 mb-1">Marks (Optional)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={injectForm.marks}
+                      onChange={(e) => setInjectForm({ ...injectForm, marks: e.target.value })}
+                      placeholder="e.g. 68"
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManualInjectModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition cursor-pointer shadow-xs"
+                >
+                  Inject Record
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

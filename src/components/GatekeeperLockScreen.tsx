@@ -31,6 +31,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
     securityCredentials,
     lockoutState,
     resetLockout,
+    sheetUsers,
   } = useApp();
 
   const [selectedRole, setSelectedRole] = useState<'desk' | 'admin'>('desk');
@@ -286,13 +287,44 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     disabled={isLockedOut}
                     placeholder={selectedRole === 'desk' ? 'e.g. desk_official' : 'e.g. coordinator'}
                     value={username}
+                    list="sheet-users-list"
                     onChange={(e) => {
                       setUsername(e.target.value);
                       if (errorMessage) setErrorMessage(null);
                     }}
                     className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white font-mono text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:opacity-50"
                   />
+                  <datalist id="sheet-users-list">
+                    {sheetUsers.map((u) => (
+                      <option key={u.username} value={u.username}>
+                        {u.fullName ? `${u.fullName} (${u.role.toUpperCase()})` : u.role.toUpperCase()}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
+                {sheetUsers && sheetUsers.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px] text-zinc-400">
+                    <span className="text-zinc-500">Google Sheet Users:</span>
+                    {sheetUsers.map((u) => (
+                      <button
+                        key={u.username}
+                        type="button"
+                        onClick={() => {
+                          setUsername(u.username);
+                          setSelectedRole(u.role === 'admin' ? 'admin' : 'desk');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition cursor-pointer border ${
+                          username.toLowerCase() === u.username.toLowerCase()
+                            ? 'bg-indigo-900/60 border-indigo-400 text-indigo-200 font-bold'
+                            : 'bg-zinc-800/80 border-zinc-700 hover:bg-zinc-700 text-zinc-300'
+                        }`}
+                        title={`Click to auto-fill username for ${u.fullName || u.username}`}
+                      >
+                        {u.username} ({u.role})
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Password / Master Passphrase Input */}

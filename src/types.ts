@@ -394,7 +394,8 @@ export type AuditActionType =
   | 'STEP_UP_AUTHORIZED'
   | 'STEP_UP_FAILED'
   | 'SECURITY_CREDENTIALS_UPDATED'
-  | 'SESSION_AUTO_LOCKED';
+  | 'SESSION_AUTO_LOCKED'
+  | 'DATA_RECONCILED';
 
 export type AuditTargetCategory =
   | 'AUTHENTICATION'
@@ -404,7 +405,8 @@ export type AuditTargetCategory =
   | 'FINANCE_BILLS'
   | 'SYSTEM_SETTINGS'
   | 'SESSION_MANAGEMENT'
-  | 'SECURITY';
+  | 'SECURITY'
+  | 'DATA_INTEGRITY';
 
 export interface AuditLogEntry {
   id: string;
@@ -506,5 +508,33 @@ export interface LockoutState {
   isLocked: boolean;
   lockoutUntil: number | null;
   lastAttemptAt?: string;
+}
+
+export interface SheetUserAccount {
+  id?: string;
+  username: string;
+  password: string;
+  role: 'admin' | 'desk';
+  fullName?: string;
+  email?: string;
+  status?: 'active' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DiscrepancyReport {
+  totalIntakes: number;
+  totalCourseEvaluations: number;
+  expectedCoursesFromIntakes: number;
+  missingScriptsCount: number;
+  orphanScriptsCount: number;
+  fixedCount: number;
+  details: string[];
+  lastReconciledAt?: string;
+  timestamp?: string;
+  intakesChecked?: number;
+  evaluationsAudited?: number;
+  missingRestored?: number;
+  duplicatesTrimmed?: number;
 }
 

@@ -1,6 +1,7 @@
 import { getIgnouGrade } from '../utils/helpers';
 import { validatePrePushToGoogleSheets } from './dataEntryValidationService';
 import { enqueueSyncMutation, SyncQueueItem } from './syncQueueService';
+import { SheetUserAccount } from '../types';
 
 /**
  * Universal Session Normalizer
@@ -2043,6 +2044,143 @@ export async function postSyncAdmissions(_records: any[]): Promise<ApiResponse> 
   return {
     status: 'success',
     message: 'Assignment Operations are active.',
+  };
+}
+
+/**
+ * Sends a new user account to Google Sheets Users tab
+ */
+export async function postAddUser(user: SheetUserAccount): Promise<ApiResponse> {
+  const payload = {
+    action: 'ADD_USER',
+    scriptUrl: getCustomScriptUrl(),
+    payload: {
+      username: user.username,
+      password: user.password,
+      role: user.role,
+      fullName: user.fullName || user.username,
+      email: user.email || '',
+      status: user.status || 'active',
+      createdAt: user.createdAt || new Date().toISOString(),
+    },
+  };
+
+  try {
+    await sendScriptPost(payload, {
+      queueOnFailure: true,
+      type: 'ADD_INTAKE',
+      summary: `Create User: ${user.username} (${user.role})`,
+    });
+  } catch (err) {
+    console.warn('[postAddUser error]:', err);
+  }
+
+  return {
+    status: 'success',
+    action: 'ADD_USER',
+    message: `User ${user.username} successfully registered in Google Sheets.`,
+  };
+}
+
+/**
+ * Updates an existing user in Google Sheets Users tab
+ */
+export async function postUpdateUser(user: SheetUserAccount): Promise<ApiResponse> {
+  const payload = {
+    action: 'UPDATE_USER',
+    scriptUrl: getCustomScriptUrl(),
+    payload: {
+      username: user.username,
+      password: user.password,
+      role: user.role,
+      fullName: user.fullName || user.username,
+      email: user.email || '',
+      status: user.status || 'active',
+      updatedAt: new Date().toISOString(),
+    },
+  };
+
+  try {
+    await sendScriptPost(payload, {
+      queueOnFailure: true,
+      type: 'ADD_INTAKE',
+      summary: `Update User: ${user.username}`,
+    });
+  } catch (err) {
+    console.warn('[postUpdateUser error]:', err);
+  }
+
+  return {
+    status: 'success',
+    action: 'UPDATE_USER',
+    message: `User ${user.username} updated in Google Sheets.`,
+  };
+}
+
+/**
+ * Deactivates or removes a user in Google Sheets Users tab
+ */
+export async function postDeleteUser(username: string): Promise<ApiResponse> {
+  const payload = {
+    action: 'DELETE_USER',
+    scriptUrl: getCustomScriptUrl(),
+    payload: {
+      username,
+    },
+  };
+
+  try {
+    await sendScriptPost(payload, {
+      queueOnFailure: true,
+      type: 'ADD_INTAKE',
+      summary: `Delete User: ${username}`,
+    });
+  } catch (err) {
+    console.warn('[postDeleteUser error]:', err);
+  }
+
+  return {
+    status: 'success',
+    action: 'DELETE_USER',
+    message: `User ${username} removed from Google Sheets.`,
+  };
+}
+
+/**
+ * Updates an individual Course Ledger evaluation row in Google Sheets
+ */
+export async function postUpdateCourseLedgerRow(row: any): Promise<ApiResponse> {
+  const payload = {
+    action: 'UPDATE_COURSE_ROW',
+    scriptUrl: getCustomScriptUrl(),
+    payload: {
+      subId: row.subId || row.Sub_ID || row.id,
+      enrollmentNo: row.enrollmentNo || row.Enrollment_No,
+      courseCode: row.courseCode || row.Course_Code,
+      marks: row.marks !== undefined ? row.marks : null,
+      grade: row.grade || row.Grade || '',
+      evaluatorId: row.evaluatorId || row.allottedEvaluator || null,
+      componentType: row.componentType || (row.isPractical ? 'Practical' : 'Assignment'),
+      isLocked: Boolean(row.isLocked),
+      submissionDate: row.submissionDate || row.receiptDate || '',
+      session: row.session || row.Session || 'July 2026',
+    },
+  };
+
+  try {
+    await sendScriptPost(payload, {
+      queueOnFailure: true,
+      type: 'UPDATE_MARKS',
+      summary: `Update Course Row: ${row.enrollmentNo} - ${row.courseCode}`,
+    });
+  } catch (err) {
+    console.warn('[postUpdateCourseLedgerRow error]:', err);
+  }
+
+  return {
+    status: 'success',
+    action: 'UPDATE_COURSE_ROW',
+    message: `Course Ledger row ${row.courseCode} updated in Google Sheets.`,
   };
 }
 

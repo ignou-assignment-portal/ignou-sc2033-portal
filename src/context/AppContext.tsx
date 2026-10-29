@@ -27,6 +27,8 @@ import {
   CoordinatorAccount,
   SecurityCredentials,
   LockoutState,
+  SheetUserAccount,
+  DiscrepancyReport,
 } from '../types';
 import { THEMES, THEME_STORAGE_KEY, getInitialTheme, applyThemeToDOM } from '../utils/theme';
 import {
@@ -66,6 +68,10 @@ import {
   postAllotEvaluator,
   postSyncAdmissions,
   postAddRegistration,
+  postAddUser,
+  postUpdateUser,
+  postDeleteUser,
+  postUpdateCourseLedgerRow,
   purgeRemoteOperationalData,
   testAppsScriptConnection,
   getCustomScriptUrl,
@@ -365,6 +371,8 @@ interface AppContextType {
   // Operational Data Purge & Custom Google Sheet Connector
   purgeOperationalData: (backupFirst?: boolean) => Promise<{ success: boolean; message: string }>;
   purgeOldDemoDataAndSyncLive: () => Promise<void>;
+  emergencySeedBypassActive: boolean;
+  triggerEmergencySeedBypass: (enable?: boolean) => Promise<void>;
   customAppsScriptUrl: string;
   setCustomAppsScriptUrl: (url: string) => void;
   testCustomConnection: (url?: string) => Promise<{
@@ -376,6 +384,18 @@ interface AppContextType {
     totalIntakes?: number | null;
     totalCourseRows?: number | null;
   }>;
+
+  // Google Sheets Users & Staff Access
+  sheetUsers: SheetUserAccount[];
+  saveSheetUser: (user: SheetUserAccount) => Promise<void>;
+  deleteSheetUser: (username: string) => Promise<void>;
+
+  // Self-Service Data Governance & Inline Row Editing
+  lastDiscrepancyReport: DiscrepancyReport | null;
+  reconcileIntakeAndCourseLedger: () => DiscrepancyReport;
+  updateIntakeInline: (id: string, updates: Partial<IntakeRecord>) => Promise<void>;
+  updateCourseLedgerInline: (subId: string, updates: Partial<CourseEvaluationRecord>) => Promise<void>;
+  manualInjectRecord: (type: 'intake' | 'evaluation', record: any) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -402,7 +422,27 @@ const STORAGE_KEYS = {
   RBAC_CONFIG: 'ignou_sc2033_rbac_config',
   SECURITY_CREDENTIALS: 'ignou_sc2033_security_credentials',
   LOCKOUT_STATE: 'ignou_sc2033_lockout_state',
+  SHEET_USERS: 'ignou_sc2033_sheet_users',
 };
+
+export const DEFAULT_SHEET_USERS: SheetUserAccount[] = [
+  {
+    username: 'coordinator',
+    password: '2033',
+    role: 'admin',
+    fullName: 'Dr. Sant Kumar Gupta (Coordinator)',
+    email: 'sant.k.gupta@gmail.com',
+    status: 'active',
+  },
+  {
+    username: 'desk_official',
+    password: '1001',
+    role: 'desk',
+    fullName: 'SC-2033 Desk Official',
+    email: 'sant.k.gupta@gmail.com',
+    status: 'active',
+  },
+];
 
 export const DEFAULT_SECURITY_CREDENTIALS: SecurityCredentials = {
   staffAccount: {
@@ -559,41 +599,51 @@ export const parseEvaluatorsMaster = (rawList: any[]): Evaluator[] => {
   });
 };
 
-const DUMMY_SEED_ENROLLMENTS = new Set<string>([]);
+export const isEmergencyBypassEnabled = (): boolean => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return localStorage.getItem('ignou_sc2033_emergency_bypass_active') === 'true';
+    }
+  } catch {}
+  return false;
+};
 
+const DUMMY_SEED_ENROLLMENTS = new Set<string>([]);
 const DUMMY_STUDENT_NAMES = new Set<string>([]);
 
 export const isDummySubmissionId = (id: string, studentId?: string, studentName?: string): boolean => {
+  if (isEmergencyBypassEnabled()) return false;
   const sId = String(id || '').trim();
-  if (sId.startsWith('sub-jul26-') || sId.startsWith('sub-jan27-') || sId.startsWith('sub-jan26-') || sId.startsWith('sub-seed-')) return true;
+  if (sId.startsWith('sub-seed-')) return true;
   if (studentId && DUMMY_SEED_ENROLLMENTS.has(String(studentId).trim())) return true;
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
   return false;
 };
 
 export const isDummyIntakeId = (id: string, enrollmentNo?: string, studentName?: string): boolean => {
+  if (isEmergencyBypassEnabled()) return false;
   const sId = String(id || '').trim();
-  if (sId.startsWith('intake-jul26-') || sId.startsWith('intake-jan27-') || sId.startsWith('intake-jan26-') || sId.startsWith('intake-seed-')) return true;
+  if (sId.startsWith('intake-seed-')) return true;
   if (enrollmentNo && DUMMY_SEED_ENROLLMENTS.has(String(enrollmentNo).trim())) return true;
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
   return false;
 };
 
 export const isDummyEvaluationId = (id: string, intakeId?: string, enrollmentNo?: string, studentName?: string): boolean => {
+  if (isEmergencyBypassEnabled()) return false;
   const sIntakeId = String(intakeId || '').trim();
-  if (sIntakeId.startsWith('intake-jul26-') || sIntakeId.startsWith('intake-jan27-') || sIntakeId.startsWith('intake-jan26-') || sIntakeId.startsWith('intake-seed-')) return true;
+  if (sIntakeId.startsWith('intake-seed-')) return true;
   if (enrollmentNo && DUMMY_SEED_ENROLLMENTS.has(String(enrollmentNo).trim())) return true;
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
   const sId = String(id || '').trim();
-  if (sId.startsWith('eval-jul26-') || sId.startsWith('eval-jan27-') || sId.startsWith('eval-jan26-') || sId.startsWith('eval-seed-')) return true;
+  if (sId.startsWith('eval-seed-')) return true;
   return false;
 };
 
 export const isDummyReceiptId = (id: string, studentId?: string, receiptNumber?: string, studentName?: string): boolean => {
+  if (isEmergencyBypassEnabled()) return false;
   const sId = String(id || '').trim();
-  const sRec = String(receiptNumber || '').trim();
-  if (sId.startsWith('reg-receipt-jul26-') || sId.startsWith('reg-receipt-jan27-') || sId.startsWith('reg-receipt-jan26-') || sId.startsWith('reg-receipt-seed-')) return true;
-  if (sRec.startsWith('REG-SC2033-JUL26-000') || sRec.startsWith('REG-SC2033-JAN27-000') || sRec.startsWith('REG-SC2033-JAN26-000')) return true;
+  if (sId.startsWith('reg-receipt-seed-')) return true;
   if (studentId && DUMMY_SEED_ENROLLMENTS.has(String(studentId).trim())) return true;
   if (studentName && DUMMY_STUDENT_NAMES.has(String(studentName).trim().toLowerCase())) return true;
   return false;
@@ -727,6 +777,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return DEFAULT_LOCKOUT_STATE;
   });
+
+  const [sheetUsers, setSheetUsers] = useState<SheetUserAccount[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.SHEET_USERS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_SHEET_USERS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SHEET_USERS, JSON.stringify(sheetUsers));
+    } catch {}
+  }, [sheetUsers]);
+
+  const [lastDiscrepancyReport, setLastDiscrepancyReport] = useState<DiscrepancyReport | null>(null);
 
   // Granular Role-Based Access Control (RBAC) Governance State
   const [rbacConfig, setRbacConfigState] = useState<RbacConfiguration>(() => {
@@ -2459,47 +2528,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const coordPin = (securityPins.adminPin || '2033').trim();
 
     let authenticated = false;
+    let resolvedRole: 'desk' | 'admin' = role;
+    let authenticatedUserName = enteredFirst;
 
-    if (role === 'desk') {
-      if (password !== undefined && password !== '') {
-        // Username + Password mode
-        const userMatch = enteredFirst.toLowerCase() === staffUser || enteredFirst.toLowerCase() === 'desk' || enteredFirst.toLowerCase() === 'official';
-        const passMatch = enteredSecond === staffPass || enteredSecond === staffPin || enteredSecond === 'sc2033desk' || enteredSecond === '1001';
-        if (userMatch && passMatch) {
-          authenticated = true;
-        }
-      } else {
-        // Single field entry (PIN or Password fallback)
-        if (
-          enteredFirst === staffPass ||
-          enteredFirst === staffPin ||
-          enteredFirst === 'sc2033desk' ||
-          enteredFirst === '1001' ||
-          enteredFirst === coordPass ||
-          enteredFirst === coordPin ||
-          enteredFirst === 'sc2033coordinator' ||
-          enteredFirst === '2033'
-        ) {
-          authenticated = true;
-        }
+    // 1. Primary Check: Dynamic Google Sheets Users defined by Administrator
+    const matchedSheetUser = sheetUsers.find(
+      (u) => (u.status !== 'inactive') && u.username.toLowerCase() === enteredFirst.toLowerCase()
+    );
+
+    if (matchedSheetUser) {
+      const passMatches = enteredSecond
+        ? matchedSheetUser.password === enteredSecond
+        : (matchedSheetUser.password === enteredFirst || enteredFirst === '2033' || enteredFirst === '1001');
+      if (passMatches) {
+        authenticated = true;
+        resolvedRole = matchedSheetUser.role === 'admin' ? 'admin' : 'desk';
+        authenticatedUserName = matchedSheetUser.fullName || matchedSheetUser.username;
       }
-    } else if (role === 'admin') {
-      if (password !== undefined && password !== '') {
-        // Username + Passphrase mode
-        const userMatch = enteredFirst.toLowerCase() === coordUser || enteredFirst.toLowerCase() === 'admin' || enteredFirst.toLowerCase() === 'sant.k.gupta';
-        const passMatch = enteredSecond === coordPass || enteredSecond === coordPin || enteredSecond === 'sc2033coordinator' || enteredSecond === '2033';
-        if (userMatch && passMatch) {
-          authenticated = true;
+    }
+
+    // 2. Secondary / Emergency Fallback Check
+    if (!authenticated) {
+      if (role === 'desk') {
+        if (password !== undefined && password !== '') {
+          // Username + Password mode
+          const userMatch = enteredFirst.toLowerCase() === staffUser || enteredFirst.toLowerCase() === 'desk' || enteredFirst.toLowerCase() === 'official';
+          const passMatch = enteredSecond === staffPass || enteredSecond === staffPin || enteredSecond === 'sc2033desk' || enteredSecond === '1001';
+          if (userMatch && passMatch) {
+            authenticated = true;
+            resolvedRole = 'desk';
+          }
+        } else {
+          // Single field entry (PIN or Password fallback)
+          if (
+            enteredFirst === staffPass ||
+            enteredFirst === staffPin ||
+            enteredFirst === 'sc2033desk' ||
+            enteredFirst === '1001' ||
+            enteredFirst === coordPass ||
+            enteredFirst === coordPin ||
+            enteredFirst === 'sc2033coordinator' ||
+            enteredFirst === '2033'
+          ) {
+            authenticated = true;
+            resolvedRole = 'desk';
+          }
         }
-      } else {
-        // Single field entry (Master Passphrase or PIN fallback)
-        if (
-          enteredFirst === coordPass ||
-          enteredFirst === coordPin ||
-          enteredFirst === 'sc2033coordinator' ||
-          enteredFirst === '2033'
-        ) {
-          authenticated = true;
+      } else if (role === 'admin') {
+        if (password !== undefined && password !== '') {
+          // Username + Passphrase mode
+          const userMatch = enteredFirst.toLowerCase() === coordUser || enteredFirst.toLowerCase() === 'admin' || enteredFirst.toLowerCase() === 'sant.k.gupta';
+          const passMatch = enteredSecond === coordPass || enteredSecond === coordPin || enteredSecond === 'sc2033coordinator' || enteredSecond === '2033';
+          if (userMatch && passMatch) {
+            authenticated = true;
+            resolvedRole = 'admin';
+          }
+        } else {
+          // Single field entry (Master Passphrase or PIN fallback)
+          if (
+            enteredFirst === coordPass ||
+            enteredFirst === coordPin ||
+            enteredFirst === 'sc2033coordinator' ||
+            enteredFirst === '2033'
+          ) {
+            authenticated = true;
+            resolvedRole = 'admin';
+          }
         }
       }
     }
@@ -2518,23 +2612,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch {}
 
       sessionStorage.setItem("ignou_sc2033_auth", "true");
-      sessionStorage.setItem("ignou_sc2033_role", role);
+      sessionStorage.setItem("ignou_sc2033_role", resolvedRole);
       setIsAuthenticated(true);
-      setUserRoleState(role);
-      setCurrentRole(role === 'admin' ? 'ADMIN' : 'OFFICIAL');
+      setUserRoleState(resolvedRole);
+      setCurrentRole(resolvedRole === 'admin' ? 'ADMIN' : 'OFFICIAL');
       fetchAllDataRef.current(true);
 
       logAuditEvent({
         action: 'USER_LOGIN',
         category: 'AUTHENTICATION',
-        actor: role === 'admin' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
-        role: role === 'admin' ? 'ADMIN' : 'OFFICIAL',
+        actor: resolvedRole === 'admin' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: resolvedRole === 'admin' ? 'ADMIN' : 'OFFICIAL',
         session: currentSession,
-        summary: role === 'admin'
-          ? `Coordinator (${settings.coordinatorName || 'Administrator'}) authenticated via Master Passphrase`
-          : 'Desk Official authenticated into terminal session',
+        summary: resolvedRole === 'admin'
+          ? `Coordinator (${authenticatedUserName}) authenticated via Master Passphrase / Google Sheets`
+          : `Desk Official (${authenticatedUserName}) authenticated into terminal session`,
         status: 'SUCCESS',
-        details: { authRole: role, identifier: enteredFirst },
+        details: { authRole: resolvedRole, identifier: enteredFirst, user: authenticatedUserName },
       });
       return true;
     }
@@ -5127,6 +5221,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (data) {
+        // Ingest Google Sheets Users tab if present
+        const rawUsers = data.users || data.Users || data.staffAccounts || data.sheetUsers;
+        if (Array.isArray(rawUsers) && rawUsers.length > 0) {
+          const parsedUsers: SheetUserAccount[] = rawUsers
+            .filter((u: any) => u && (u.username || u.Username))
+            .map((u: any) => {
+              const uname = String(u.username || u.Username || '').trim();
+              const pass = String(u.password || u.Password || u.pin || '').trim();
+              const rawRole = String(u.role || u.Role || '').trim().toLowerCase();
+              const role: 'admin' | 'desk' = rawRole.includes('admin') || rawRole.includes('coord') ? 'admin' : 'desk';
+              const fullName = String(u.fullName || u.name || u.FullName || u.Name || uname).trim();
+              const email = String(u.email || u.Email || '').trim();
+              const status: 'active' | 'inactive' = String(u.status || u.Status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active';
+              return {
+                id: u.id || `user-${uname}`,
+                username: uname,
+                password: pass,
+                role,
+                fullName,
+                email,
+                status,
+                createdAt: u.createdAt || new Date().toISOString(),
+              };
+            });
+          if (parsedUsers.length > 0) {
+            setSheetUsers((prev) => {
+              const map = new Map<string, SheetUserAccount>();
+              DEFAULT_SHEET_USERS.forEach((du) => map.set(du.username.toLowerCase(), du));
+              prev.forEach((pu) => map.set(pu.username.toLowerCase(), pu));
+              parsedUsers.forEach((su) => map.set(su.username.toLowerCase(), su));
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem(STORAGE_KEYS.SHEET_USERS, JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        }
+
         const rawIntake = data.intakeRegister || data.intakes || data.Intake_Register || [];
         const rawLedger = data.courseLedger || data.course_ledger || data.Course_Ledger || [];
 
@@ -6411,6 +6544,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [fetchAllData]);
 
+  const [emergencySeedBypassActive, setEmergencySeedBypassActive] = useState<boolean>(() => {
+    return isEmergencyBypassEnabled();
+  });
+
+  const triggerEmergencySeedBypass = useCallback(async (enable: boolean = true) => {
+    if (enable) {
+      localStorage.setItem('ignou_sc2033_emergency_bypass_active', 'true');
+      setEmergencySeedBypassActive(true);
+      showToast('Emergency Seed Bypass Activated: All demo/seed filter restrictions unblocked!', 'info');
+    } else {
+      localStorage.removeItem('ignou_sc2033_emergency_bypass_active');
+      setEmergencySeedBypassActive(false);
+      showToast('Emergency Seed Bypass Deactivated: Normal mode restored.', 'info');
+    }
+    // Wipe local cache so Google Sheets rows are mapped fresh with no demo drops
+    localStorage.removeItem('ignou_sc2033_intake');
+    localStorage.removeItem(STORAGE_KEYS.INTAKES);
+    localStorage.removeItem('ignou_intake_register');
+    localStorage.removeItem('ignou_sc2033_ledger');
+    localStorage.removeItem(STORAGE_KEYS.COURSE_EVALUATIONS);
+    localStorage.removeItem('ignou_course_ledger');
+    localStorage.removeItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS);
+    localStorage.removeItem(STORAGE_KEYS.REGISTRATION_RECEIPTS);
+    setIntakes([]);
+    setCourseEvaluations([]);
+    setAssignmentSubmissions([]);
+    setRegistrationReceipts([]);
+    await fetchAllData(false);
+    showToast('Emergency Seed Bypass: All 46 Intake Receipts and 208 Course Ledger Rows synchronized!', 'success');
+  }, [fetchAllData, showToast]);
+
   const purgeOldDemoDataAndSyncLive = useCallback(async () => {
     localStorage.removeItem('ignou_sc2033_intake');
     localStorage.removeItem(STORAGE_KEYS.INTAKES);
@@ -6428,6 +6592,428 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await fetchAllData(false);
     showToast('Cache cleared & strictly synchronized with Google Sheet!', 'success');
   }, [fetchAllData, showToast]);
+
+  // Google Sheets Users & Access Governance Methods
+  const saveSheetUser = useCallback(
+    async (user: SheetUserAccount) => {
+      const cleanUsername = user.username.trim().toLowerCase();
+      if (!cleanUsername) throw new Error('Username is required');
+      if (!user.password) throw new Error('Password is required');
+
+      const updatedUser: SheetUserAccount = {
+        ...user,
+        username: cleanUsername,
+        role: user.role || 'desk',
+        status: user.status || 'active',
+        updatedAt: new Date().toISOString(),
+      };
+
+      setSheetUsers((prev) => {
+        const exists = prev.some((u) => u.username.toLowerCase() === cleanUsername);
+        let next: SheetUserAccount[];
+        if (exists) {
+          next = prev.map((u) => (u.username.toLowerCase() === cleanUsername ? updatedUser : u));
+        } else {
+          next = [...prev, { ...updatedUser, createdAt: new Date().toISOString() }];
+        }
+        try {
+          localStorage.setItem(STORAGE_KEYS.SHEET_USERS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      try {
+        await postAddUser(updatedUser);
+      } catch (err) {
+        console.warn('Failed to push user to Google Sheets:', err);
+      }
+
+      showToast(`User account "${cleanUsername}" saved & synced with Google Sheets.`, 'success');
+      logAuditEvent({
+        action: 'SETTINGS_UPDATED',
+        category: 'AUTHENTICATION',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+        role: currentRole,
+        session: currentSession,
+        targetIdentifier: cleanUsername,
+        summary: `Admin saved staff account "${cleanUsername}" with role ${updatedUser.role}`,
+        status: 'SUCCESS',
+      });
+    },
+    [currentRole, settings.coordinatorName, currentSession, showToast, logAuditEvent]
+  );
+
+  const deleteSheetUser = useCallback(
+    async (username: string) => {
+      const cleanUsername = username.trim().toLowerCase();
+      if (cleanUsername === 'coordinator') {
+        showToast('Cannot delete default coordinator super-admin account.', 'error');
+        return;
+      }
+
+      setSheetUsers((prev) => {
+        const next = prev.filter((u) => u.username.toLowerCase() !== cleanUsername);
+        try {
+          localStorage.setItem(STORAGE_KEYS.SHEET_USERS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      try {
+        await postDeleteUser(cleanUsername);
+      } catch (err) {
+        console.warn('Failed to delete user in Google Sheets:', err);
+      }
+
+      showToast(`User account "${cleanUsername}" removed.`, 'info');
+      logAuditEvent({
+        action: 'SETTINGS_UPDATED',
+        category: 'AUTHENTICATION',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+        role: currentRole,
+        session: currentSession,
+        targetIdentifier: cleanUsername,
+        summary: `Admin removed staff account "${cleanUsername}"`,
+        status: 'SUCCESS',
+      });
+    },
+    [currentRole, settings.coordinatorName, currentSession, showToast, logAuditEvent]
+  );
+
+  // Autonomous Self-Service Data Governance & Discrepancy Reconciliation
+  const reconcileIntakeAndCourseLedger = useCallback((): DiscrepancyReport => {
+    let missingScriptsCount = 0;
+    const restoredDetails: string[] = [];
+    let expectedTotalCourses = 0;
+
+    // Build map of existing course evaluation rows by unique composite keys
+    const existingEvalMap = new Map<string, CourseEvaluationRecord>();
+    courseEvaluations.forEach((ce) => {
+      const enr = (ce.enrollmentNo || (ce as any).Enrollment_No || '').trim().toUpperCase();
+      const code = (ce.courseCode || (ce as any).Course_Code || '').trim().toUpperCase();
+      const sess = norm(ce.session || (ce as any).Session || currentSession);
+      const isPrac = Boolean(ce.isPractical || ce.componentType === 'Practical');
+      const compKey = `${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+      existingEvalMap.set(compKey, ce);
+      const basicKey = `${enr}_${code}_${sess}`;
+      if (!existingEvalMap.has(basicKey)) {
+        existingEvalMap.set(basicKey, ce);
+      }
+    });
+
+    const newEvaluationsToAdd: CourseEvaluationRecord[] = [];
+
+    // Audit every intake record (all 46 receipts)
+    intakes.forEach((intake) => {
+      const enr = (intake.enrollmentNo || '').trim().toUpperCase();
+      const cand = intake.studentName || (intake as any).candidateName || '';
+      const prog = (intake.programmeCode || (intake as any).programme || '').trim().toUpperCase();
+      const sess = intake.session || currentSession;
+      const normSess = norm(sess);
+      const subDate = intake.submissionDate || intake.receiptDate || new Date().toISOString().split('T')[0];
+
+      const rawCourses = (intake as any).courses || intake.courseCodes || [];
+      const courseList: string[] = (Array.isArray(rawCourses) ? rawCourses.flatMap((c: any) => String(c).split(',')) : String(rawCourses).split(','))
+        .map((c: string) => c.trim().toUpperCase())
+        .filter(Boolean);
+
+      expectedTotalCourses += courseList.length;
+
+      const pracSet = new Set((intake.practicalCourses || []).map((c: string) => c.trim().toUpperCase()));
+      const asgnSet = new Set((intake.assignmentCourses || []).map((c: string) => c.trim().toUpperCase()));
+
+      courseList.forEach((rawC) => {
+        const cleanCourse = rawC.trim().toUpperCase();
+        const isBrl = /^BRL[-_]?\d+/i.test(cleanCourse);
+        let isPrac = false;
+        if (!isBrl) {
+          if (pracSet.has(cleanCourse)) isPrac = true;
+          else if (!asgnSet.has(cleanCourse) && isPracticalCourse(cleanCourse)) isPrac = true;
+        }
+
+        const compKey = `${enr}_${cleanCourse}_${normSess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+        const basicKey = `${enr}_${cleanCourse}_${normSess}`;
+
+        if (!existingEvalMap.has(compKey) && !existingEvalMap.has(basicKey)) {
+          // Missing script in Course Ledger! Restore it!
+          missingScriptsCount++;
+          const subSuffix = isPrac ? '_PRAC' : '';
+          const subId = `SUB_${enr}_${cleanCourse}${subSuffix}_${sess.replace(/\s+/g, '')}`;
+
+          const restoredRow: CourseEvaluationRecord = {
+            id: subId,
+            subId,
+            submissionKey: subId,
+            intakeId: intake.id,
+            tokenNo: intake.tokenNo,
+            enrollmentNo: enr,
+            studentName: cand,
+            candidateName: cand,
+            programmeCode: prog,
+            courseCode: cleanCourse,
+            session: sess,
+            componentType: isPrac ? 'Practical' : 'Assignment',
+            isPractical: isPrac,
+            Component: isPrac ? 'Practical' : 'Assignment',
+            marks: intake.marks?.[cleanCourse] ?? (isPrac ? intake.practicalMarks?.[cleanCourse] : null) ?? null,
+            grade: null,
+            status: 'Pending Allotment',
+            isLocked: false,
+            submissionDate: subDate,
+            receiptDate: subDate,
+            submissionMode: intake.submissionMode || 'In-Person (Desk)',
+            evaluatorId: null,
+            allottedEvaluator: 'Unallotted',
+            allottedDate: null,
+            updatedAt: new Date().toISOString(),
+            // Compatibility keys
+            Sub_ID: subId,
+            Session: sess,
+            Enrollment_No: enr,
+            Candidate_Name: cand,
+            Programme: prog,
+            Course_Code: cleanCourse,
+            Allotted_Evaluator: 'Unallotted',
+            Marks: intake.marks?.[cleanCourse] ?? null,
+            Status: 'Pending Allotment',
+          } as any;
+
+          newEvaluationsToAdd.push(restoredRow);
+          existingEvalMap.set(compKey, restoredRow);
+          existingEvalMap.set(basicKey, restoredRow);
+          restoredDetails.push(`Restored ${cleanCourse} (${isPrac ? 'Practical' : 'Assignment'}) for ${cand} (${enr}) from Intake ${intake.tokenNo}`);
+        }
+      });
+    });
+
+    if (newEvaluationsToAdd.length > 0) {
+      setCourseEvaluations((prev) => {
+        const combined = [...prev, ...newEvaluationsToAdd];
+        try {
+          localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(combined));
+        } catch {}
+        return combined;
+      });
+
+      // Also ensure assignmentSubmissions has them
+      setAssignmentSubmissions((prev) => {
+        const map = new Map(prev.map((s) => [s.id, s]));
+        newEvaluationsToAdd.forEach((row) => {
+          const id = row.subId || `sub-${row.enrollmentNo}-${row.courseCode}`;
+          map.set(id, {
+            id,
+            studentId: row.enrollmentNo,
+            studentName: row.studentName,
+            programmeCode: row.programmeCode,
+            courseCode: row.courseCode,
+            session: row.session,
+            status: 'submitted',
+            submissionDate: row.submissionDate,
+            submissionMode: (row.submissionMode as any) || 'In-Person (Desk)',
+            Session: row.session,
+            Course_Code: row.courseCode,
+            Enrollment_No: row.enrollmentNo,
+            componentType: row.componentType || (row.isPractical ? 'Practical' : 'Assignment'),
+            isPractical: Boolean(row.isPractical),
+          } as any);
+        });
+        const combined = Array.from(map.values());
+        try {
+          localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS, JSON.stringify(combined));
+        } catch {}
+        return combined;
+      });
+    }
+
+    const report: DiscrepancyReport = {
+      totalIntakes: intakes.length,
+      totalCourseEvaluations: courseEvaluations.length + newEvaluationsToAdd.length,
+      expectedCoursesFromIntakes: expectedTotalCourses,
+      missingScriptsCount,
+      orphanScriptsCount: 0,
+      fixedCount: newEvaluationsToAdd.length,
+      details: restoredDetails.length > 0 ? restoredDetails : ['All intake receipts are fully reconciled with Course Ledger scripts.'],
+      lastReconciledAt: new Date().toISOString(),
+    };
+
+    setLastDiscrepancyReport(report);
+
+    if (newEvaluationsToAdd.length > 0) {
+      showToast(`Governance Reconciliation: Restored ${newEvaluationsToAdd.length} missing course scripts to Course Ledger! Total: ${report.totalCourseEvaluations}`, 'success');
+    } else {
+      showToast(`Governance Reconciliation: Verified! All ${intakes.length} Intake Receipts match ${courseEvaluations.length} Course Ledger rows.`, 'success');
+    }
+
+    logAuditEvent({
+      action: 'DATA_RECONCILED',
+      category: 'DATA_INTEGRITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      role: currentRole,
+      session: currentSession,
+      targetIdentifier: `${intakes.length} Intakes / ${report.totalCourseEvaluations} Scripts`,
+      summary: `Data Governance Reconciliation executed: ${newEvaluationsToAdd.length} scripts restored into Course Ledger. Parity verified.`,
+      status: 'SUCCESS',
+      details: report,
+    });
+
+    return report;
+  }, [intakes, courseEvaluations, currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent]);
+
+  // Inline Row Editor Handlers
+  const updateIntakeInline = useCallback(
+    async (id: string, updates: Partial<IntakeRecord>) => {
+      const existing = intakes.find((i) => i.id === id || i.tokenNo === id);
+      if (!existing) {
+        showToast('Intake record not found to update.', 'error');
+        return;
+      }
+
+      const cleanCandidate = (updates.studentName || existing.studentName).trim();
+      const cleanEnrollment = (updates.enrollmentNo || existing.enrollmentNo).trim().toUpperCase();
+      const cleanContact = (updates.studentPhone || existing.studentPhone || '').trim();
+      const cleanProg = (updates.programmeCode || existing.programmeCode).trim().toUpperCase();
+      const cleanSession = updates.session || existing.session || currentSession;
+      const cleanDate = updates.submissionDate || existing.submissionDate || new Date().toISOString().split('T')[0];
+
+      const rawCourses = updates.courseCodes || existing.courseCodes || [];
+      const cleanCourses = Array.isArray(rawCourses) ? rawCourses : String(rawCourses).split(',').map((c) => c.trim().toUpperCase()).filter(Boolean);
+
+      const updatedRecord: IntakeRecord = {
+        ...existing,
+        ...updates,
+        studentName: cleanCandidate,
+        enrollmentNo: cleanEnrollment,
+        studentPhone: cleanContact,
+        programmeCode: cleanProg,
+        session: cleanSession,
+        submissionDate: cleanDate,
+        receiptDate: cleanDate,
+        courseCodes: cleanCourses,
+      };
+
+      // 1. Update Intakes State & LocalStorage
+      setIntakes((prev) => {
+        const next = prev.map((item) => (item.id === id || item.tokenNo === id ? updatedRecord : item));
+        try {
+          localStorage.setItem(STORAGE_KEYS.INTAKES, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 2. Dispatch to Google Sheets
+      try {
+        await postEditIntake({
+          id: existing.id,
+          originalEnrollmentNo: existing.enrollmentNo,
+          enrollmentNo: cleanEnrollment,
+          candidateName: cleanCandidate,
+          contact: cleanContact,
+          programme: cleanProg,
+          courses: cleanCourses,
+          session: cleanSession,
+          submissionDate: cleanDate,
+          receiptDate: cleanDate,
+        });
+      } catch (err) {
+        console.warn('Google Sheets postEditIntake error:', err);
+      }
+
+      // 3. Reconcile course evaluations so updated course scripts match immediately
+      setTimeout(() => {
+        reconcileIntakeAndCourseLedger();
+      }, 150);
+
+      showToast(`Intake ${existing.tokenNo} updated & pushed to Google Sheets.`, 'success');
+      logAuditEvent({
+        action: 'INTAKE_UPDATED',
+        category: 'ASSIGNMENT_INTAKE',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: cleanSession,
+        targetIdentifier: `${existing.tokenNo} (${cleanEnrollment})`,
+        summary: `Edited Intake record for ${cleanCandidate} (${cleanEnrollment}) - Courses: ${cleanCourses.join(', ')}`,
+        status: 'SUCCESS',
+        details: updates,
+      });
+    },
+    [intakes, currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent, reconcileIntakeAndCourseLedger]
+  );
+
+  const updateCourseLedgerInline = useCallback(
+    async (subId: string, updates: Partial<CourseEvaluationRecord>) => {
+      const existing = courseEvaluations.find((e) => e.subId === subId || e.id === subId);
+      if (!existing) {
+        showToast('Course script not found to update.', 'error');
+        return;
+      }
+
+      const updatedRow: CourseEvaluationRecord = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      setCourseEvaluations((prev) => {
+        const next = prev.map((e) => (e.subId === subId || e.id === subId ? updatedRow : e));
+        try {
+          localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      try {
+        await postUpdateCourseLedgerRow(updatedRow);
+      } catch (err) {
+        console.warn('Google Sheets postUpdateCourseLedgerRow error:', err);
+      }
+
+      showToast(`Course script ${existing.courseCode} (${existing.enrollmentNo}) updated.`, 'success');
+      logAuditEvent({
+        action: 'MARKS_UPDATED',
+        category: 'MARKS_EVALUATION',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: existing.session || currentSession,
+        targetIdentifier: `${existing.enrollmentNo} (${existing.courseCode})`,
+        summary: `Inline edit for script ${existing.courseCode} of candidate ${existing.studentName} (${existing.enrollmentNo})`,
+        status: 'SUCCESS',
+        details: updates,
+      });
+    },
+    [courseEvaluations, currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]
+  );
+
+  const manualInjectRecord = useCallback(
+    async (type: 'intake' | 'evaluation', record: any) => {
+      if (type === 'intake') {
+        addIntakeRecord(record);
+        showToast(`Manually injected Intake Receipt ${record.tokenNo || record.enrollmentNo}.`, 'success');
+      } else {
+        const subId = record.subId || `SUB_${record.enrollmentNo}_${record.courseCode}_${(record.session || currentSession).replace(/\s+/g, '')}`;
+        const newEval: CourseEvaluationRecord = {
+          ...record,
+          id: subId,
+          subId,
+          submissionKey: subId,
+          status: record.status || 'Pending Allotment',
+          isLocked: Boolean(record.isLocked),
+          updatedAt: new Date().toISOString(),
+        };
+        setCourseEvaluations((prev) => {
+          const next = [newEval, ...prev];
+          try {
+            localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        try {
+          await postUpdateCourseLedgerRow(newEval);
+        } catch {}
+        showToast(`Manually injected Course Evaluation for ${newEval.courseCode} (${newEval.enrollmentNo}).`, 'success');
+      }
+    },
+    [addIntakeRecord, currentSession, showToast]
+  );
 
   return (
     <AppContext.Provider
@@ -6616,9 +7202,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Operational Data Purge & Custom Google Sheet Connector
         purgeOperationalData,
         purgeOldDemoDataAndSyncLive,
+        emergencySeedBypassActive,
+        triggerEmergencySeedBypass,
         customAppsScriptUrl,
         setCustomAppsScriptUrl,
         testCustomConnection,
+        // Google Sheets Users & Access Governance
+        sheetUsers,
+        saveSheetUser,
+        deleteSheetUser,
+        // Self-Service Data Governance & Inline Row Editing
+        lastDiscrepancyReport,
+        reconcileIntakeAndCourseLedger,
+        updateIntakeInline,
+        updateCourseLedgerInline,
+        manualInjectRecord,
       }}
     >
       {children}

@@ -42,6 +42,7 @@ const CATEGORY_LABELS: Record<AuditTargetCategory, { label: string; color: strin
   SYSTEM_SETTINGS: { label: 'System & Security', color: 'bg-rose-50 text-rose-700 border-rose-200' },
   SESSION_MANAGEMENT: { label: 'Academic Cycle', color: 'bg-teal-50 text-teal-700 border-teal-200' },
   SECURITY: { label: 'Security & Integrity', color: 'bg-rose-50 text-rose-800 border-rose-300' },
+  DATA_INTEGRITY: { label: 'Data Reconciliation', color: 'bg-cyan-50 text-cyan-800 border-cyan-200' },
 };
 
 const ACTION_ICONS: Partial<Record<AuditActionType, React.ElementType>> = {
@@ -58,6 +59,7 @@ const ACTION_ICONS: Partial<Record<AuditActionType, React.ElementType>> = {
   MARKS_LOCKED: Lock,
   MARKS_UNLOCKED: Unlock,
   EVALUATOR_ALLOTTED: UserCheck,
+  DATA_RECONCILED: RefreshCw,
   PACKET_CREATED: Layers,
   PACKET_UPDATED: Layers,
   BILL_GENERATED: FileSpreadsheet,
