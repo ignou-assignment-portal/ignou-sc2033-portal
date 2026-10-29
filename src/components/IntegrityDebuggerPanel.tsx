@@ -99,12 +99,42 @@ export const IntegrityDebuggerPanel: React.FC = () => {
     filesPushed?: string[];
   } | null>(null);
   const [copiedAppContext, setCopiedAppContext] = useState(false);
+  const [isDownloadingAppContext, setIsDownloadingAppContext] = useState(false);
+
+  const handleDownloadFixedAppContext = async () => {
+    setIsDownloadingAppContext(true);
+    try {
+      const res = await fetch('/api/export-source-file?file=src/context/AppContext.tsx');
+      if (!res.ok) throw new Error('Failed to fetch source file from server');
+      const data = await res.json();
+      if (!data.content || data.content.startsWith('<!doctype html>')) {
+        throw new Error('Received invalid file content. Please retry.');
+      }
+      const blob = new Blob([data.content], { type: 'text/typescript;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'AppContext.tsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast('Downloaded AppContext.tsx directly!', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Download failed. Please try again.', 'error');
+    } finally {
+      setIsDownloadingAppContext(false);
+    }
+  };
 
   const handleCopyFixedAppContext = async () => {
     try {
       const res = await fetch('/api/export-source-file?file=src/context/AppContext.tsx');
       if (!res.ok) throw new Error('Failed to fetch source file');
       const data = await res.json();
+      if (!data.content || data.content.startsWith('<!doctype html>')) {
+        throw new Error('Received invalid file content.');
+      }
       await navigator.clipboard.writeText(data.content);
       setCopiedAppContext(true);
       showToast('Copied fixed AppContext.tsx to clipboard!', 'success');
@@ -1294,14 +1324,15 @@ export const IntegrityDebuggerPanel: React.FC = () => {
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <a
-                      href="/api/export-source-file?file=src/context/AppContext.tsx&download=1"
-                      download="AppContext.tsx"
-                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                    <button
+                      type="button"
+                      onClick={handleDownloadFixedAppContext}
+                      disabled={isDownloadingAppContext}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer whitespace-nowrap"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>1. Download Fixed AppContext.tsx</span>
-                    </a>
+                      <span>{isDownloadingAppContext ? 'Preparing...' : '1. Download Fixed AppContext.tsx'}</span>
+                    </button>
 
                     <button
                       type="button"
