@@ -288,7 +288,9 @@ interface AppContextType {
   // Module E: Global Student Search & Lookup Modal
   isSearchModalOpen: boolean;
   searchInitialQuery: string;
-  openSearchModal: (initialQuery?: string) => void;
+  searchMode: 'REGISTRATION' | 'INTAKE';
+  setSearchMode: (mode: 'REGISTRATION' | 'INTAKE') => void;
+  openSearchModal: (initialQuery?: string, initialMode?: 'REGISTRATION' | 'INTAKE') => void;
   closeSearchModal: () => void;
 
   // Navigation Sidebar Collapsible & Hideable State
@@ -489,7 +491,7 @@ export const DEFAULT_RBAC_CONFIG: RbacConfiguration = {
       category: 'Intake',
     },
     marks_entry: {
-      desk: 'ALLOWED',
+      desk: 'PIN_REQUIRED',
       admin: 'ALLOWED',
       label: 'Evaluation Marks Entry',
       description: 'Enter raw assignment marks, evaluate criteria, and calculate grades.',
@@ -2076,6 +2078,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Module E: Global Student Search Modal State
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [searchInitialQuery, setSearchInitialQuery] = useState<string>('');
+  const [searchMode, setSearchMode] = useState<'REGISTRATION' | 'INTAKE'>('REGISTRATION');
 
   // Navigation Sidebar Collapsible & Hideable State
   const [isSidebarHidden, setIsSidebarHiddenState] = useState<boolean>(() => {
@@ -2220,8 +2223,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [showToast]);
 
-  const openSearchModal = useCallback((initialQuery: string = '') => {
+  const openSearchModal = useCallback((initialQuery: string = '', initialMode: 'REGISTRATION' | 'INTAKE' = 'REGISTRATION') => {
     setSearchInitialQuery(initialQuery);
+    setSearchMode(initialMode);
     setIsSearchModalOpen(true);
   }, []);
 
@@ -7135,6 +7139,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Module E: Global Student Search
         isSearchModalOpen,
         searchInitialQuery,
+        searchMode,
+        setSearchMode,
         openSearchModal,
         closeSearchModal,
         // Navigation Sidebar Collapsible & Hideable State

@@ -62,7 +62,6 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
   const [intakeSearchQuery, setIntakeSearchQuery] = useState('');
   const [intakeHasSearched, setIntakeHasSearched] = useState(false);
   const [verifiedViaQr, setVerifiedViaQr] = useState(false);
-  const [showSetupWizard, setShowSetupWizard] = useState(false);
 
   // Auto-detect mobile QR code verification deep-link (?verify=TOKEN or ?enrol=ENROL or #verify=TOKEN)
   useEffect(() => {
@@ -890,7 +889,7 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
           </div>
 
           {/* Quick Action Navigation Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-8 mt-8 border-t border-slate-800/80">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-8 mt-8 border-t border-slate-800/80">
             <a
               href="#tracker"
               className="group p-3.5 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 transition flex items-center gap-3 cursor-pointer"
@@ -929,20 +928,6 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
                 <span className="text-[11px] text-slate-400 block truncate">S.D. Jain Girls' College</span>
               </div>
             </a>
-
-            <button
-              type="button"
-              onClick={() => setShowSetupWizard(true)}
-              className="group p-3.5 rounded-xl bg-slate-900/90 hover:bg-emerald-950/60 border border-slate-800 hover:border-emerald-700/60 transition flex items-center gap-3 cursor-pointer text-left"
-            >
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
-                <FileSpreadsheet className="w-4 h-4" />
-              </div>
-              <div className="text-left overflow-hidden">
-                <span className="text-xs font-bold text-emerald-300 block truncate">Google Sheets Setup</span>
-                <span className="text-[11px] text-slate-400 block truncate">Database wizard</span>
-              </div>
-            </button>
           </div>
         </div>
       </section>
@@ -1741,15 +1726,6 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
                 <span>RC Kohima</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <span>•</span>
-              <button
-                type="button"
-                onClick={() => setShowSetupWizard(true)}
-                className="hover:text-amber-400 text-zinc-400 flex items-center gap-1 transition cursor-pointer"
-              >
-                <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
-                <span>Sheets DB Setup Guide</span>
-              </button>
             </div>
           </div>
 
@@ -1763,15 +1739,6 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
           </div>
         </div>
       </footer>
-
-      {/* Fresh Google Sheets Database Setup Wizard Modal */}
-      {showSetupWizard && (
-        <NewDatabaseSetupWizard
-          isOpen={showSetupWizard}
-          onClose={() => setShowSetupWizard(false)}
-          defaultSession={currentSession}
-        />
-      )}
     </div>
   );
 };

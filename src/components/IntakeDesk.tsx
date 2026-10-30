@@ -24,8 +24,6 @@ import {
   ShieldCheck,
   FileCheck,
   FileCheck2,
-  Camera,
-  QrCode,
   Eye,
   CheckCircle2,
   GraduationCap,
@@ -64,7 +62,6 @@ import { IntakeReportModal } from './IntakeReportModal';
 import { downloadStudentIntakePDF } from '../services/pdfReportGenerator';
 import { AssignmentStatusSummaryCard } from './AssignmentStatusSummaryCard';
 import { ErrorBoundary } from './ErrorBoundary';
-import { BarcodeScannerModal } from './BarcodeScannerModal';
 import { runBackgroundDataEntryValidation } from '../services/dataEntryValidationService';
 
 export { ValidationSummary, ProgrammeIntakeBarChart, EnrollmentAuditModal, IntakeReportModal, AssignmentStatusSummaryCard };
@@ -2063,18 +2060,6 @@ export const IntakeDesk: React.FC = () => {
             </span>
           </button>
 
-          {/* Barcode / QR Scanner Button: Uses device camera to scan and identify student records */}
-          <button
-            type="button"
-            id="open-barcode-scanner-btn"
-            data-testid="open-barcode-scanner-btn"
-            onClick={() => setIsScannerModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-2xs border border-purple-200 bg-purple-50/90 text-purple-700 hover:bg-purple-100 hover:border-purple-300 active:scale-98"
-            title="Scan student assignment barcode or QR code using device camera"
-          >
-            <Camera className="w-4 h-4 text-purple-600 shrink-0" />
-            <span>Scan Barcode/QR</span>
-          </button>
 
           {/* Button to trigger integrity scan to detect duplicate enrollment numbers across all current active session records */}
           <button
@@ -2277,16 +2262,6 @@ export const IntakeDesk: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          id="btn-scan-camera-enrollment"
-                          onClick={() => setIsScannerModalOpen(true)}
-                          className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer transition shadow-2xs"
-                          title="Open camera to scan Barcode / QR from assignment slip or student ID"
-                        >
-                          <Camera className="w-3 h-3 text-purple-600" />
-                          <span>Scan Barcode / QR</span>
-                        </button>
-                        <button
-                          type="button"
                           id="btn-check-enrollment-active-session"
                           onClick={handleCheckSingleEnrollmentInActiveSession}
                           className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer transition"
@@ -2325,14 +2300,6 @@ export const IntakeDesk: React.FC = () => {
                         }`}
                         required
                       />
-                      <button
-                        type="button"
-                        onClick={() => setIsScannerModalOpen(true)}
-                        className="absolute right-2 top-2 p-1 text-zinc-400 hover:text-purple-600 hover:bg-purple-50 rounded transition cursor-pointer"
-                        title="Scan Barcode / QR with camera"
-                      >
-                        <Camera className="w-4 h-4" />
-                      </button>
                     </div>
 
                     {/* Real-time Enrollment Number Validation Feedback */}
@@ -4500,12 +4467,6 @@ export const IntakeDesk: React.FC = () => {
         </div>
       )}
 
-      {/* Barcode & QR Scanner Modal (Camera-assisted Student Retrieval) */}
-      <BarcodeScannerModal
-        isOpen={isScannerModalOpen}
-        onClose={() => setIsScannerModalOpen(false)}
-        onScanSuccess={handleBarcodeScanSuccess}
-      />
 
       {/* Student Fresh Admission & Re-Registration Modal */}
       <AddRegistrationModal

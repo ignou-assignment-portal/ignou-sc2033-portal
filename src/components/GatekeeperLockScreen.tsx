@@ -302,29 +302,6 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     ))}
                   </datalist>
                 </div>
-                {sheetUsers && sheetUsers.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap mt-1.5 text-[11px] text-zinc-400">
-                    <span className="text-zinc-500">Google Sheet Users:</span>
-                    {sheetUsers.map((u) => (
-                      <button
-                        key={u.username}
-                        type="button"
-                        onClick={() => {
-                          setUsername(u.username);
-                          setSelectedRole(u.role === 'admin' ? 'admin' : 'desk');
-                        }}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition cursor-pointer border ${
-                          username.toLowerCase() === u.username.toLowerCase()
-                            ? 'bg-indigo-900/60 border-indigo-400 text-indigo-200 font-bold'
-                            : 'bg-zinc-800/80 border-zinc-700 hover:bg-zinc-700 text-zinc-300'
-                        }`}
-                        title={`Click to auto-fill username for ${u.fullName || u.username}`}
-                      >
-                        {u.username} ({u.role})
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Password / Master Passphrase Input */}
@@ -370,28 +347,6 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </div>
-
-              {/* Institutional Default Credentials Helper Box */}
-              <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-1">
-                <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                  <span className="font-semibold text-zinc-300 flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Authorized Centre Credentials:</span>
-                  </span>
-                  <span className="text-[10px] text-zinc-400 font-mono">SC-2033</span>
-                </div>
-                {selectedRole === 'desk' ? (
-                  <div className="text-[11px] font-mono text-teal-300 bg-teal-950/40 p-1.5 rounded-lg border border-teal-800/50 flex items-center justify-between">
-                    <span>User: <strong>desk_official</strong></span>
-                    <span>Pass: <strong>sc2033desk</strong> (or 1001)</span>
-                  </div>
-                ) : (
-                  <div className="text-[11px] font-mono text-indigo-300 bg-indigo-950/40 p-1.5 rounded-lg border border-indigo-800/50 flex items-center justify-between">
-                    <span>ID: <strong>coordinator</strong></span>
-                    <span>Pass: <strong>sc2033coordinator</strong> (or 2033)</span>
-                  </div>
-                )}
               </div>
 
               {/* Unlock Terminal Action Button */}

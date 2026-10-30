@@ -5,7 +5,6 @@ import { Printer, X, CheckCircle2, AlertTriangle, Calendar, FlaskConical, Pencil
 import { EditIntakeModal } from './EditIntakeModal';
 import { IntakeRecord } from '../types';
 import { InstitutionalSeal } from './InstitutionalSeal';
-import { ReceiptQRCode } from './ReceiptQRCode';
 
 export const ReceiptModal: React.FC = () => {
   const {
@@ -172,10 +171,6 @@ export const ReceiptModal: React.FC = () => {
     }
   };
 
-  // Simulated barcode stripes pattern
-  const barcodePattern = [
-    3, 1, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 4, 1, 2, 1, 3, 1, 4, 2, 1, 3, 2, 1, 2, 4, 1, 3, 1, 2, 3, 1, 4
-  ];
 
   return (
     <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto animate-in fade-in">
@@ -355,53 +350,7 @@ export const ReceiptModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Barcode & Digital QR Code Verification Tracking Strip */}
-          <div className="mt-1.5 print:mt-1 p-2 print:p-1 bg-white border border-zinc-300 rounded-lg flex items-center justify-between gap-3">
-            {/* Linear Barcode */}
-            <div className="flex flex-col items-start sm:items-center">
-              <span className="text-[8px] print:text-[6.5px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5">
-                Physical Token Barcode
-              </span>
-              <div className="h-6 print:h-4.5 flex items-end gap-[1.5px] px-2 py-0.5 bg-zinc-50 border border-zinc-200 rounded">
-                {barcodePattern.map((width, idx) => (
-                  <div
-                    key={idx}
-                    className={`bg-zinc-950 ${idx % 2 === 0 ? 'h-full' : 'h-3/4'}`}
-                    style={{ width: `${width * 1.2}px` }}
-                  />
-                ))}
-              </div>
-              <span className="font-mono text-[9px] print:text-[7.5px] text-zinc-700 font-bold tracking-widest mt-0.5">
-                *{selectedReceiptRecord.tokenNo}*
-              </span>
-            </div>
 
-            {/* Verification Status Center Badge */}
-            <div className="hidden sm:flex flex-col items-center text-center px-1">
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 border border-emerald-300 text-emerald-800 text-[10px] print:text-[8px] font-bold">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span>Verified & Digitally Stamped</span>
-              </div>
-              <div className="text-[9.5px] print:text-[7.5px] text-zinc-500 font-mono mt-0.5">
-                Enrol: {selectedReceiptRecord.enrollmentNo} • Prog: {selectedReceiptRecord.programmeCode}
-              </div>
-              <span className="text-[8px] print:text-[6.5px] text-zinc-400 mt-0.5 print:hidden">
-                Scan QR to verify live on mobile
-              </span>
-            </div>
-
-            {/* Unique 2D Mobile Verification QR Code */}
-            <ReceiptQRCode
-              tokenNo={selectedReceiptRecord.tokenNo}
-              enrollmentNo={selectedReceiptRecord.enrollmentNo}
-              studentName={selectedReceiptRecord.studentName}
-              programmeCode={selectedReceiptRecord.programmeCode}
-              session={selectedReceiptRecord.session}
-              submissionDate={currentReceiptDate || receiptDateVal}
-              courseCodes={safeCourseCodes}
-              size={66}
-            />
-          </div>
 
           {/* Student Info Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 print:gap-1 mt-1.5 print:mt-1 text-xs print:text-[9px] border border-zinc-200 rounded-lg p-2 print:p-1 bg-zinc-50/60">

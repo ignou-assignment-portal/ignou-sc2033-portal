@@ -3,7 +3,6 @@ import { useApp } from '../context/AppContext';
 import { TabType } from './Sidebar';
 import {
   UserPlus,
-  Search,
   Receipt,
   FileCheck2,
   Clock,
@@ -29,7 +28,6 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
     sessionCourseEvaluations,
     currentSession,
     openReceiptModal,
-    openSearchModal,
     setIsSyncDrawerOpen,
     isSyncingSheets,
     syncStatus,
@@ -100,19 +98,6 @@ export const QuickActionBar: React.FC<QuickActionBarProps> = ({
             <span>+ New Intake</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => openSearchModal()}
-            id="quick-action-search"
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 text-slate-700 text-xs font-semibold transition cursor-pointer shadow-2xs group"
-            title="Search student by enrollment number, name, or course (Ctrl+K)"
-          >
-            <Search className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-600 shrink-0" />
-            <span>Search Student</span>
-            <kbd className="hidden sm:inline px-1.5 py-0.2 text-[10px] font-mono bg-white text-slate-500 rounded border border-slate-200">
-              Ctrl+K
-            </kbd>
-          </button>
 
           {/* Quick Counter Metrics */}
           <div className="hidden xl:flex items-center gap-1.5 pl-2 border-l border-slate-200 text-xs text-slate-600">

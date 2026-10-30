@@ -10,6 +10,8 @@ import {
   Menu,
   Lock,
   Home,
+  GraduationCap,
+  Layers,
 } from 'lucide-react';
 import { InstitutionalSeal } from './InstitutionalSeal';
 import { RecentActivity } from './RecentActivity';
@@ -125,35 +127,86 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
           </div>
         </div>
 
-        {/* Zone 2: Global Student Search */}
-        <div className="flex-1 max-w-md mx-2 hidden md:block">
+        {/* Zone 2: Dual Student Search (1. Registration Status, 2. Assignment Intake Status) */}
+        <div className="flex-1 max-w-xl mx-2 hidden lg:flex items-center gap-2">
+          {/* 1st Search: Student Registration Status */}
           <button
-            id="global-student-search-btn"
+            id="student-registration-search-btn"
             type="button"
-            onClick={() => openSearchModal()}
-            className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-slate-300 text-slate-600 hover:text-slate-950 text-xs font-medium transition shadow-2xs cursor-pointer group"
-            title="Instant Student Status & Evaluation Lookup (Ctrl+K)"
+            onClick={() => openSearchModal('', 'REGISTRATION')}
+            className="flex-1 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-indigo-200/80 bg-indigo-50/50 hover:bg-white hover:border-indigo-400 text-slate-700 hover:text-indigo-950 text-xs font-medium transition shadow-2xs cursor-pointer group"
+            title="1. Search Student Registration Status, Enrolled Courses & Admission Cadre"
           >
-            <div className="flex items-center gap-2">
-              <Search className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition shrink-0" />
-              <span>Search student enrollment, name, or course...</span>
+            <div className="flex items-center gap-1.5 truncate">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-600 group-hover:scale-110 transition shrink-0" />
+              <span className="font-semibold text-indigo-950 text-[11px] truncate">1. Registration Status</span>
             </div>
-            <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-white text-slate-500 rounded border border-slate-200 shadow-2xs">
-              Ctrl+K
+            <kbd className="hidden xl:inline px-1 py-0.2 text-[9px] font-mono bg-white text-indigo-700 rounded border border-indigo-200 shrink-0">
+              Admissions
+            </kbd>
+          </button>
+
+          {/* 2nd Search: Assignment Intake Status */}
+          <button
+            id="student-intake-search-btn"
+            type="button"
+            onClick={() => openSearchModal('', 'INTAKE')}
+            className="flex-1 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-emerald-200/80 bg-emerald-50/50 hover:bg-white hover:border-emerald-400 text-slate-700 hover:text-emerald-950 text-xs font-medium transition shadow-2xs cursor-pointer group"
+            title="2. Search Assignment Intake Status, Token Receipts, Evaluators & Marks"
+          >
+            <div className="flex items-center gap-1.5 truncate">
+              <Layers className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition shrink-0" />
+              <span className="font-semibold text-emerald-950 text-[11px] truncate">2. Intake Status</span>
+            </div>
+            <kbd className="hidden xl:inline px-1 py-0.2 text-[9px] font-mono bg-white text-emerald-700 rounded border border-emerald-200 shrink-0">
+              Receipts
             </kbd>
           </button>
         </div>
 
-        {/* Mobile Search Button (Compact) */}
-        <button
-          type="button"
-          onClick={() => openSearchModal()}
-          className="md:hidden p-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:text-zinc-950 hover:bg-zinc-50 transition shadow-2xs cursor-pointer"
-          title="Search Student Records (Ctrl+K)"
-          aria-label="Search Student Records"
-        >
-          <Search className="w-4 h-4 text-indigo-600" />
-        </button>
+        {/* Medium Screen Search Dropdown / Trigger */}
+        <div className="hidden md:flex lg:hidden items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => openSearchModal('', 'REGISTRATION')}
+            className="px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-900 text-xs font-semibold hover:bg-indigo-100 transition flex items-center gap-1.5 cursor-pointer"
+            title="1. Student Registration Status"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Registration</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openSearchModal('', 'INTAKE')}
+            className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-semibold hover:bg-emerald-100 transition flex items-center gap-1.5 cursor-pointer"
+            title="2. Assignment Intake Status"
+          >
+            <Layers className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Intake</span>
+          </button>
+        </div>
+
+        {/* Mobile Search Buttons (Dual Compact) */}
+        <div className="flex md:hidden items-center gap-1">
+          <button
+            type="button"
+            onClick={() => openSearchModal('', 'REGISTRATION')}
+            className="p-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+            title="Search Registration Status"
+            aria-label="Search Registration Status"
+          >
+            <GraduationCap className="w-4 h-4 text-indigo-600" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openSearchModal('', 'INTAKE')}
+            className="p-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition shadow-2xs cursor-pointer"
+            title="Search Assignment Intake Status"
+            aria-label="Search Assignment Intake Status"
+          >
+            <Layers className="w-4 h-4 text-emerald-600" />
+          </button>
+        </div>
 
         {/* Zone 3: Recent Activity, Academic Cycle & Executive Profile / Role */}
         <div className="flex items-center gap-2 shrink-0">

@@ -68,6 +68,14 @@ export const CourseSubmissionsTracker: React.FC = () => {
 
   // Find programme details from master
   const selectedProgDetails = useMemo(() => {
+    if (selectedProgramme === 'ALL' || !selectedProgramme) {
+      return {
+        code: 'ALL',
+        name: 'All Academic Programmes (Consolidated Study Centre Cohort)',
+        level: 'All Degrees, Diplomas & Certificates',
+        courses: [],
+      };
+    }
     const found = IGNOU_PROGRAMMES.find((p) => p.code === selectedProgramme);
     if (found) return found;
     return {
@@ -81,7 +89,9 @@ export const CourseSubmissionsTracker: React.FC = () => {
   // All submissions for this specific programme in current session (respecting componentFilter)
   const programmeSubmissions = useMemo(() => {
     return sessionAssignmentSubmissions.filter((s) => {
-      if (s.programmeCode !== selectedProgramme) return false;
+      if (selectedProgramme !== 'ALL' && selectedProgramme && s.programmeCode !== selectedProgramme) {
+        return false;
+      }
       if (componentFilter === 'Assignment') {
         return !s.isPractical && s.componentType !== 'Practical';
       }
@@ -419,7 +429,8 @@ export const CourseSubmissionsTracker: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `IGNOU_${selectedProgramme}_${currentSession.replace(/\s+/g, '_')}_Programme_Submissions.csv`);
+    const safeProgName = selectedProgramme === 'ALL' ? 'All_Programmes' : selectedProgramme || 'Programmes';
+    link.setAttribute('download', `IGNOU_${safeProgName}_${currentSession.replace(/\s+/g, '_')}_Programme_Submissions.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -636,6 +647,9 @@ export const CourseSubmissionsTracker: React.FC = () => {
                     id="programme-selector-dropdown"
                     className="w-full pl-3 pr-10 py-2.5 bg-zinc-50 border border-zinc-300 rounded-xl text-sm font-bold text-zinc-900 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
                   >
+                    <option value="ALL">
+                      All Programmes (ALL) — ({sessionAssignmentSubmissions.filter((s) => s.status === 'submitted').length}/{sessionAssignmentSubmissions.length} total scripts)
+                    </option>
                     {activeProgrammeCodes.map((code) => {
                       const progSubs = sessionAssignmentSubmissions.filter((s) => s.programmeCode === code);
                       const subCnt = progSubs.filter((s) => s.status === 'submitted').length;
@@ -669,6 +683,26 @@ export const CourseSubmissionsTracker: React.FC = () => {
                 Quick Select Active Programmes:
               </span>
               <div className="flex flex-wrap gap-2">
+                {/* 1-Click All Programmes Pill */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProgramme('ALL')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 border ${
+                    selectedProgramme === 'ALL'
+                      ? 'bg-indigo-950 text-white border-indigo-950 shadow-xs font-bold'
+                      : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                  }`}
+                >
+                  <span className="font-mono font-black">All Programmes</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      selectedProgramme === 'ALL' ? 'bg-amber-400 text-zinc-950 font-bold' : 'bg-zinc-200 text-zinc-700'
+                    }`}
+                  >
+                    {sessionAssignmentSubmissions.filter((s) => s.status === 'submitted').length}/{sessionAssignmentSubmissions.length}
+                  </span>
+                </button>
+
                 {activeProgrammeCodes.map((code) => {
                   const progSubs = sessionAssignmentSubmissions.filter((s) => s.programmeCode === code);
                   const subCnt = progSubs.filter((s) => s.status === 'submitted').length;
