@@ -37,9 +37,9 @@ export const InstitutionalSeal: React.FC<InstitutionalSealProps> = ({
       >
         <defs>
           <linearGradient id="compSealNavy" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0F172A" />
-            <stop offset="50%" stopColor="#0A192F" />
-            <stop offset="100%" stopColor="#020617" />
+            <stop offset="0%" stopColor="#1E40AF" />
+            <stop offset="50%" stopColor="#1D4ED8" />
+            <stop offset="100%" stopColor="#1E3A8A" />
           </linearGradient>
           <linearGradient id="compGoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#FDE68A" />
@@ -93,7 +93,7 @@ export const InstitutionalSeal: React.FC<InstitutionalSealProps> = ({
           cx="256"
           cy="256"
           r="208"
-          fill="#0A192F"
+          fill="#1E3A8A"
           stroke="url(#compGoldGradient)"
           strokeWidth="4"
         />
@@ -210,12 +210,12 @@ export const InstitutionalSeal: React.FC<InstitutionalSealProps> = ({
           <path d="M 264 168 L 272 160 M 266 188 L 276 182 M 265 208 L 274 204" stroke="#B45309" strokeWidth="2" strokeLinecap="round" />
           <path d="M 256 124 L 256 280" stroke="#FEF08A" strokeWidth="3" strokeLinecap="round" />
           <path d="M 254 278 L 258 278 L 257 302 L 256 304 L 255 302 Z" fill="#D97706" stroke="#B45309" strokeWidth="1" />
-          <line x1="256" y1="288" x2="256" y2="303" stroke="#0F172A" strokeWidth="1.2" />
+          <line x1="256" y1="288" x2="256" y2="303" stroke="#1E3A8A" strokeWidth="1.2" />
         </g>
 
         {/* Base Foundation Ribbon */}
         <g transform="translate(0, 8)">
-          <path d="M 194 382 L 318 382 L 308 406 L 204 406 Z" fill="#0A192F" stroke="url(#compGoldGradient)" strokeWidth="2.5" />
+          <path d="M 194 382 L 318 382 L 308 406 L 204 406 Z" fill="#1E3A8A" stroke="url(#compGoldGradient)" strokeWidth="2.5" />
           <text
             x="256"
             y="400"
@@ -226,7 +226,7 @@ export const InstitutionalSeal: React.FC<InstitutionalSealProps> = ({
             textAnchor="middle"
             letterSpacing="3"
           >
-            ESTD 2033
+            SC 2033
           </text>
         </g>
       </svg>
