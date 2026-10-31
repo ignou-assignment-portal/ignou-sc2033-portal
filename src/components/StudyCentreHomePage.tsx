@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '../utils/helpers';
 import { NewDatabaseSetupWizard } from './NewDatabaseSetupWizard';
+import { AssignmentStatusSummaryCard } from './AssignmentStatusSummaryCard';
 
 interface StudyCentreHomePageProps {
   onOpenGatekeeper: () => void;
@@ -47,12 +48,27 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
   const {
     settings,
     currentSession,
+    sessionIntakes,
     allIntakes,
     allProgrammes,
     isAuthenticated,
     openReceiptModal,
     studentRegistrations,
   } = useApp();
+
+  // Scripts Received & Candidates calculations for metrics strip & oversight
+  const totalScriptsReceived = useMemo(() => {
+    const targetIntakes = (sessionIntakes && sessionIntakes.length > 0) ? sessionIntakes : allIntakes;
+    return targetIntakes.reduce((sum, r) => {
+      const c = r?.courseCodes || (r as any)?.courses || (r as any)?.Courses;
+      return sum + (Array.isArray(c) ? c.length : typeof c === 'string' ? c.split(',').filter(Boolean).length : 0);
+    }, 0);
+  }, [sessionIntakes, allIntakes]);
+
+  const totalCandidatesIntake = useMemo(() => {
+    const targetIntakes = (sessionIntakes && sessionIntakes.length > 0) ? sessionIntakes : allIntakes;
+    return new Set(targetIntakes.map((r) => String(r?.enrollmentNo || '').trim()).filter(Boolean)).size;
+  }, [sessionIntakes, allIntakes]);
 
   // Universal Registration Status Search State
   const [regSearchQuery, setRegSearchQuery] = useState('');
@@ -933,44 +949,78 @@ export const StudyCentreHomePage: React.FC<StudyCentreHomePageProps> = ({
       </section>
 
       {/* 4. Centre Operational Metrics Strip */}
-      <section className="bg-slate-50 border-b border-slate-200 py-6">
+      <section className="bg-slate-50 dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
-              <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">Registered Students</span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-black text-slate-900 font-mono">{studentRegistrations.length}</span>
-                <span className="text-xs text-indigo-700 font-semibold">Fresh & Re-Reg</span>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {/* 1. Scripts Received (Primary Metric) */}
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border-2 border-indigo-500/40 dark:border-indigo-500/50 p-4 shadow-2xs relative overflow-hidden group">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] uppercase font-black text-indigo-700 dark:text-indigo-400 tracking-wider block">
+                  Scripts Received
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+                  {currentSession}
+                </span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">Admissions master source</p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono">
+                  {totalScriptsReceived}
+                </span>
+                <span className="text-xs text-amber-600 dark:text-amber-400 font-bold">
+                  Booklets
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">
+                Physical course scripts received
+              </p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+            {/* 2. Intake Receipts */}
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-4 shadow-2xs">
               <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">Intake Receipts</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-black text-slate-900 font-mono">{allIntakes.length}</span>
-                <span className="text-xs text-emerald-700 font-semibold">Acknowledged</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{allIntakes.length}</span>
+                <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">{totalCandidatesIntake} Candidates</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">Official tokens recorded</p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">Official tokens recorded</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+            {/* 3. Registered Students */}
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-4 shadow-2xs">
+              <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">Registered Students</span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{studentRegistrations.length}</span>
+                <span className="text-xs text-indigo-700 dark:text-indigo-400 font-semibold">Fresh & Re-Reg</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">Admissions master source</p>
+            </div>
+
+            {/* 4. Academic Programmes */}
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-4 shadow-2xs">
               <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">Academic Programmes</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-black text-slate-900 font-mono">{allProgrammes.length}</span>
-                <span className="text-xs text-amber-700 font-semibold">Active Degrees</span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{allProgrammes.length}</span>
+                <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">Active Degrees</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">B.A., B.Com., M.A. & Diplomas</p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">B.A., B.Com., M.A. & Diplomas</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
+            {/* 5. Desk Policy */}
+            <div className="bg-white dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 p-4 shadow-2xs col-span-2 md:col-span-1">
               <span className="text-[11px] uppercase font-bold text-slate-400 tracking-wider block">Desk Policy</span>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-lg font-black text-emerald-700">Zero-Fee Desk</span>
+                <span className="text-lg font-black text-emerald-700 dark:text-emerald-400">Zero-Fee Desk</span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">Non-financial intake receipt</p>
+              <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1">Non-financial intake receipt</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* 4b. Live Assignment Operations & Intake Oversight */}
+      <section className="bg-white dark:bg-zinc-950 border-b border-slate-200 dark:border-zinc-800 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <AssignmentStatusSummaryCard />
         </div>
       </section>
 

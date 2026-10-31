@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp, norm } from '../context/AppContext';
 import { formatDate, formatDateTime } from '../utils/helpers';
+import { CourseEvaluationRecord } from '../types';
 import {
   Clock,
   ShieldCheck,
@@ -42,42 +43,108 @@ export const AssignmentStatusSummaryCard: React.FC<AssignmentStatusSummaryCardPr
   const [activeModalTab, setActiveModalTab] = useState<ModalTab>('PENDING');
   const [modalSearchQuery, setModalSearchQuery] = useState('');
 
+  // Combined intake scripts count with course evaluation records (matching Module A scripts count)
+  const allUnifiedScripts = useMemo(() => {
+    const scriptsMap = new Map<string, CourseEvaluationRecord>();
+
+    // 1. Ingest existing recorded course evaluations for this session
+    sessionCourseEvaluations.forEach((evalRec) => {
+      const enr = String(evalRec.enrollmentNo || (evalRec as any).Enrollment_No || '').trim().toUpperCase();
+      const code = String(evalRec.courseCode || (evalRec as any).Course_Code || '').trim().toUpperCase();
+      if (!enr || !code) return;
+      const key = `${enr}__${code}`;
+      scriptsMap.set(key, evalRec);
+    });
+
+    // 2. Combine with all scripts from intake receipts in this session
+    sessionIntakes.forEach((intake) => {
+      const enr = String(intake.enrollmentNo || '').trim().toUpperCase();
+      if (!enr) return;
+      const courses = intake.courseCodes || (intake as any)?.courses || (intake as any)?.Courses || [];
+      const courseArr: string[] = Array.isArray(courses)
+        ? courses
+        : typeof courses === 'string'
+        ? (courses as string).split(',').map((c) => c.trim()).filter(Boolean)
+        : [];
+
+      courseArr.forEach((c) => {
+        const code = String(c).trim().toUpperCase();
+        if (!code) return;
+        const key = `${enr}__${code}`;
+
+        if (!scriptsMap.has(key)) {
+          scriptsMap.set(key, {
+            id: `SUB_${enr}_${code.replace(/[^A-Z0-9]/g, '')}_${norm(intake.session || currentSession)}`,
+            submissionKey: `SUB_${enr}_${code}`,
+            intakeId: intake.id,
+            tokenNo: intake.tokenNo || 'DESK-INP',
+            enrollmentNo: intake.enrollmentNo,
+            studentName: intake.studentName || 'Learner',
+            studentPhone: intake.studentPhone,
+            studentEmail: intake.studentEmail,
+            programmeCode: intake.programmeCode || 'IGNOU',
+            courseCode: code,
+            submissionDate: intake.submissionDate || (intake as any).receiptDate || (intake as any).createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+            allotmentDate: null,
+            returnDate: null,
+            status: 'Pending Allotment',
+            evaluatorId: null,
+            evaluatorCode: null,
+            evaluatorName: null,
+            marks: (intake.marks && intake.marks[code] !== undefined) ? intake.marks[code] : null,
+            grade: null,
+            isLocked: false,
+            session: intake.session || currentSession,
+            isPractical: Boolean(intake.practicalCourses?.some((pc) => pc.toUpperCase() === code)),
+            componentType: intake.practicalCourses?.some((pc) => pc.toUpperCase() === code) ? 'Practical' : 'Assignment',
+          } as unknown as CourseEvaluationRecord);
+        } else {
+          const existing = scriptsMap.get(key)!;
+          if (!existing.tokenNo && intake.tokenNo) {
+            existing.tokenNo = intake.tokenNo;
+          }
+          if (!existing.studentName && intake.studentName) {
+            existing.studentName = intake.studentName;
+          }
+          if (!existing.submissionDate && intake.submissionDate) {
+            existing.submissionDate = intake.submissionDate;
+          }
+        }
+      });
+    });
+
+    return Array.from(scriptsMap.values());
+  }, [sessionCourseEvaluations, sessionIntakes, currentSession]);
+
   // 1. Total Assignment Scripts Received in Session
-  const totalReceivedScripts = useMemo(() => {
-    if (sessionCourseEvaluations.length > 0) {
-      return sessionCourseEvaluations.length;
-    }
-    return sessionIntakes.reduce((sum, r) => sum + (r.courseCodes ? r.courseCodes.length : 0), 0);
-  }, [sessionCourseEvaluations, sessionIntakes]);
+  const totalReceivedScripts = allUnifiedScripts.length;
 
   // 2. Verified Assignments (Evaluations that are Locked / Verified in statutory award sheets)
   const verifiedAssignmentsList = useMemo(() => {
-    return sessionCourseEvaluations.filter((rec) => rec.isLocked || rec.status === 'Marks Locked');
-  }, [sessionCourseEvaluations]);
+    return allUnifiedScripts.filter((rec) => rec.isLocked || rec.status === 'Marks Locked');
+  }, [allUnifiedScripts]);
 
   const verifiedCount = verifiedAssignmentsList.length;
 
   // 3. Pending Assignments (Scripts received awaiting evaluation or verification lock)
   const pendingAssignmentsList = useMemo(() => {
-    return sessionCourseEvaluations.filter((rec) => !rec.isLocked && rec.status !== 'Marks Locked');
-  }, [sessionCourseEvaluations]);
+    return allUnifiedScripts.filter((rec) => !rec.isLocked && rec.status !== 'Marks Locked');
+  }, [allUnifiedScripts]);
 
-  const pendingCount = sessionCourseEvaluations.length > 0
-    ? pendingAssignmentsList.length
-    : Math.max(0, totalReceivedScripts - verifiedCount);
+  const pendingCount = pendingAssignmentsList.length;
 
   // Sub-breakdowns of pending
   const pendingUnallottedCount = useMemo(() => {
-    return sessionCourseEvaluations.filter(
-      (e) => !e.isLocked && (!e.evaluatorId || e.status === 'Pending Allotment')
+    return pendingAssignmentsList.filter(
+      (e) => !e.evaluatorId || e.status === 'Pending Allotment'
     ).length;
-  }, [sessionCourseEvaluations]);
+  }, [pendingAssignmentsList]);
 
   const pendingUnderEvalCount = useMemo(() => {
-    return sessionCourseEvaluations.filter(
-      (e) => !e.isLocked && (e.evaluatorId || e.status === 'Allotted' || e.status === 'Evaluated')
+    return pendingAssignmentsList.filter(
+      (e) => Boolean(e.evaluatorId || e.status === 'Allotted' || e.status === 'Evaluated')
     ).length;
-  }, [sessionCourseEvaluations]);
+  }, [pendingAssignmentsList]);
 
   // 4. Rejected Assignments (Integrity rule violations, rejected intake attempts, disqualified scripts)
   const rejectedLogsList = useMemo(() => {
