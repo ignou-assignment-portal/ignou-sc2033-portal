@@ -7,10 +7,16 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0F172A",
-  "theme_color": "#0F172A",
+  "background_color": "#1E3A8A",
+  "theme_color": "#1E3A8A",
   "categories": ["education", "productivity", "management"],
   "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "/pwa-192x192.png",
       "sizes": "192x192",

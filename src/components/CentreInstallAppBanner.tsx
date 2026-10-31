@@ -78,7 +78,7 @@ export const CentreInstallAppBanner: React.FC = () => {
         width: 320,
         margin: 1,
         color: {
-          dark: '#0F172A',
+          dark: '#1E3A8A',
           light: '#FFFFFF',
         },
         errorCorrectionLevel: 'M',
@@ -123,8 +123,8 @@ export const CentreInstallAppBanner: React.FC = () => {
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
           {/* Left Column: Branding, Title, and Description */}
           <div className="flex items-start gap-3.5 max-w-2xl">
-            <div className="w-12 h-12 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-900 shrink-0 shadow-2xs">
-              <Download className="w-6 h-6 text-amber-900" />
+            <div className="w-14 h-14 rounded-2xl bg-white border-2 border-indigo-200 flex items-center justify-center shrink-0 shadow-xs p-1">
+              <InstitutionalSeal size="lg" className="w-12 h-12" />
             </div>
 
             <div className="space-y-1">
@@ -213,12 +213,13 @@ export const CentreInstallAppBanner: React.FC = () => {
               )}
 
               <div className="space-y-2 text-left">
-                <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900">
+                <div className="flex items-center gap-2 font-bold text-xs text-slate-900">
+                  <InstitutionalSeal size="xs" />
                   <Smartphone className="w-4 h-4 text-indigo-600" />
-                  <span>Instant Mobile Phone & Tablet Handoff</span>
+                  <span>Instant Mobile Phone & Tablet Handoff (SC 2033 App Logo)</span>
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed max-w-lg">
-                  Point any smartphone camera (iPhone Safari or Android Chrome) at this QR code to open IGNOU SC-2033 immediately on the device. Then tap <strong>Share &rarr; Add to Home Screen</strong> (iOS) or <strong>Install</strong> (Android).
+                  Point any smartphone camera (iPhone Safari or Android Chrome) at this QR code to open IGNOU SC-2033 immediately on the device. Then tap <strong>Share &rarr; Add to Home Screen</strong> (iOS) or <strong>Install</strong> (Android) to add the Royal Blue <strong>SC 2033</strong> seal icon to your mobile home screen.
                 </p>
 
                 <div className="flex items-center gap-2 pt-1">
