@@ -2762,14 +2762,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [intakes, currentSession]);
 
   const sessionCourseEvaluations = useMemo(() => {
-    return (courseEvaluations || [])
-      .filter((c: any) => {
-        if (!c) return false;
-        if (isDummyEvaluationId(c.id, c.intakeId, c.enrollmentNo || c.Enrollment_No)) return false;
-        if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") return true;
-        return normalizeSession(c.Session || c.session) === normalizeSession(currentSession);
+    const evalsForSession = (courseEvaluations || []).filter((c: any) => {
+      if (!c) return false;
+      if (isDummyEvaluationId(c.id, c.intakeId, c.enrollmentNo || c.Enrollment_No)) return false;
+      if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") return true;
+      return normalizeSession(c.Session || c.session) === normalizeSession(currentSession);
+    });
+
+    const existingKeySet = new Set<string>();
+    evalsForSession.forEach((ce: any) => {
+      const enr = (ce.enrollmentNo || ce.Enrollment_No || '').toString().trim().toUpperCase();
+      const code = (ce.courseCode || ce.Course_Code || '').toString().trim().toUpperCase();
+      const sess = normalizeSession(ce.Session || ce.session || currentSession);
+      const isPrac = Boolean(ce.isPractical || ce.componentType === 'Practical');
+      existingKeySet.add(`${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`);
+      existingKeySet.add(`${enr}_${code}_${sess}`);
+    });
+
+    const synthesizedFromIntakes: CourseEvaluationRecord[] = [];
+    sessionIntakes.forEach((intake: any) => {
+      const enr = (intake.enrollmentNo || '').toString().trim().toUpperCase();
+      const cand = intake.studentName || intake.candidateName || '';
+      const prog = (intake.programmeCode || intake.programme || '').toString().trim().toUpperCase();
+      const sess = intake.Session || intake.session || currentSession;
+      const normSess = normalizeSession(sess);
+      const subDate = intake.submissionDate || intake.receiptDate || new Date().toISOString().split('T')[0];
+
+      const rawCourses = intake.courses || intake.courseCodes || [];
+      const courseList: string[] = (Array.isArray(rawCourses) ? rawCourses.flatMap((c: any) => String(c).split(',')) : String(rawCourses).split(','))
+        .map((c: string) => c.trim().toUpperCase())
+        .filter(Boolean);
+
+      const pracSet = new Set((intake.practicalCourses || []).map((c: string) => c.trim().toUpperCase()));
+      const asgnSet = new Set((intake.assignmentCourses || []).map((c: string) => c.trim().toUpperCase()));
+
+      courseList.forEach((rawC: string) => {
+        const cleanCourse = rawC.trim().toUpperCase();
+        const isBrl = /^BRL[-_]?\d+/i.test(cleanCourse);
+        let isPrac = false;
+        if (!isBrl) {
+          if (pracSet.has(cleanCourse)) isPrac = true;
+          else if (!asgnSet.has(cleanCourse) && isPracticalCourse(cleanCourse)) isPrac = true;
+        }
+
+        const compKey = `${enr}_${cleanCourse}_${normSess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+        const basicKey = `${enr}_${cleanCourse}_${normSess}`;
+
+        if (!existingKeySet.has(compKey) && !existingKeySet.has(basicKey)) {
+          const subSuffix = isPrac ? '_PRAC' : '';
+          const subId = `SUB_${enr}_${cleanCourse}${subSuffix}_${sess.replace(/\s+/g, '')}`;
+          const restoredRow: CourseEvaluationRecord = {
+            id: subId,
+            subId,
+            submissionKey: subId,
+            intakeId: intake.id,
+            tokenNo: intake.tokenNo,
+            enrollmentNo: enr,
+            studentName: cand,
+            candidateName: cand,
+            programmeCode: prog,
+            courseCode: cleanCourse,
+            session: sess,
+            componentType: isPrac ? 'Practical' : 'Assignment',
+            isPractical: isPrac,
+            Component: isPrac ? 'Practical' : 'Assignment',
+            marks: intake.marks?.[cleanCourse] ?? (isPrac ? intake.practicalMarks?.[cleanCourse] : null) ?? null,
+            grade: null,
+            status: 'Pending Allotment',
+            isLocked: false,
+            submissionDate: subDate,
+            receiptDate: subDate,
+            submissionMode: intake.submissionMode || 'In-Person (Desk)',
+            evaluatorId: null,
+            allottedEvaluator: 'Unallotted',
+            allottedDate: null,
+            updatedAt: new Date().toISOString(),
+            Sub_ID: subId,
+            Session: sess,
+            Enrollment_No: enr,
+            Candidate_Name: cand,
+            Programme: prog,
+            Course_Code: cleanCourse,
+            Allotted_Evaluator: 'Unallotted',
+            Marks: intake.marks?.[cleanCourse] ?? null,
+            Status: 'Pending Allotment',
+          } as any;
+          synthesizedFromIntakes.push(restoredRow);
+          existingKeySet.add(compKey);
+          existingKeySet.add(basicKey);
+        }
       });
-  }, [courseEvaluations, currentSession]);
+    });
+
+    return [...evalsForSession, ...synthesizedFromIntakes];
+  }, [courseEvaluations, sessionIntakes, currentSession]);
 
   const sessionPackets = useMemo(() => {
     if (sessionCourseEvaluations.length === 0) {
@@ -6685,7 +6771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   // Autonomous Self-Service Data Governance & Discrepancy Reconciliation
-  const reconcileIntakeAndCourseLedger = useCallback((): DiscrepancyReport => {
+  const reconcileIntakeAndCourseLedger = useCallback((isSilent: boolean = false): DiscrepancyReport => {
     let missingScriptsCount = 0;
     const restoredDetails: string[] = [];
     let expectedTotalCourses = 0;
@@ -6842,26 +6928,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setLastDiscrepancyReport(report);
 
-    if (newEvaluationsToAdd.length > 0) {
-      showToast(`Governance Reconciliation: Restored ${newEvaluationsToAdd.length} missing course scripts to Course Ledger! Total: ${report.totalCourseEvaluations}`, 'success');
-    } else {
-      showToast(`Governance Reconciliation: Verified! All ${intakes.length} Intake Receipts match ${courseEvaluations.length} Course Ledger rows.`, 'success');
-    }
+    if (!isSilent) {
+      if (newEvaluationsToAdd.length > 0) {
+        showToast(`Governance Reconciliation: Restored ${newEvaluationsToAdd.length} missing course scripts to Course Ledger! Total: ${report.totalCourseEvaluations}`, 'success');
+      } else {
+        showToast(`Governance Reconciliation: Verified! All ${intakes.length} Intake Receipts match ${courseEvaluations.length} Course Ledger rows.`, 'success');
+      }
 
-    logAuditEvent({
-      action: 'DATA_RECONCILED',
-      category: 'DATA_INTEGRITY',
-      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
-      role: currentRole,
-      session: currentSession,
-      targetIdentifier: `${intakes.length} Intakes / ${report.totalCourseEvaluations} Scripts`,
-      summary: `Data Governance Reconciliation executed: ${newEvaluationsToAdd.length} scripts restored into Course Ledger. Parity verified.`,
-      status: 'SUCCESS',
-      details: report,
-    });
+      logAuditEvent({
+        action: 'DATA_RECONCILED',
+        category: 'DATA_INTEGRITY',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: currentSession,
+        targetIdentifier: `${intakes.length} Intakes / ${report.totalCourseEvaluations} Scripts`,
+        summary: `Data Governance Reconciliation executed: ${newEvaluationsToAdd.length} scripts restored into Course Ledger. Parity verified.`,
+        status: 'SUCCESS',
+        details: report,
+      });
+    }
 
     return report;
   }, [intakes, courseEvaluations, currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent]);
+
+  // Continuous automatic background reconciliation between Intake records and Course Ledger
+  useEffect(() => {
+    if (intakes && intakes.length > 0) {
+      reconcileIntakeAndCourseLedger(true);
+    }
+  }, [intakes.length, currentSession, reconcileIntakeAndCourseLedger]);
 
   // Inline Row Editor Handlers
   const updateIntakeInline = useCallback(

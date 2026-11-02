@@ -52,16 +52,8 @@ export const RegionalCentreSEDAwardSheet: React.FC = () => {
   const normalizeSession = (s: any) => norm(s);
 
   const filteredLedger = useMemo(() => {
-    const list = (courseLedger && courseLedger.length > 0)
-      ? courseLedger
-      : (allCourseEvaluations && allCourseEvaluations.length > 0)
-      ? allCourseEvaluations
-      : sessionCourseEvaluations;
-    return list.filter((row: any) => {
-      if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") return true;
-      return norm(row.Session || row.session) === norm(currentSession);
-    });
-  }, [courseLedger, allCourseEvaluations, sessionCourseEvaluations, currentSession]);
+    return sessionCourseEvaluations;
+  }, [sessionCourseEvaluations]);
 
   // Extract all distinct course codes available in the session
   const distinctCourses = useMemo(() => {
