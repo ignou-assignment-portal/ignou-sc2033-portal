@@ -66,8 +66,10 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ onViewHome }) => {
 
         {/* Workspace Content Area */}
         <div className="flex-1 flex flex-col min-w-0 transition-all duration-300">
-          {/* Counter Productivity Quick Action Bar */}
-          <QuickActionBar activeTab={activeTab} setActiveTab={setActiveTab} />
+          {/* Counter Productivity Quick Action Bar - Rendered for Desk Intake workflow */}
+          {activeTab === 'INTAKE_DESK' && (
+            <QuickActionBar activeTab={activeTab} setActiveTab={setActiveTab} />
+          )}
 
           <main className={`flex-1 w-full mx-auto p-3 sm:p-5 space-y-5 transition-all duration-200 ${
             isContentFullWidth ? 'max-w-none px-4 sm:px-6' : 'max-w-7xl px-4 sm:p-6'

@@ -29,6 +29,7 @@ import {
   LockoutState,
   SheetUserAccount,
   DiscrepancyReport,
+  FullDatabaseBackup,
 } from '../types';
 import { THEMES, THEME_STORAGE_KEY, getInitialTheme, applyThemeToDOM } from '../utils/theme';
 import {
@@ -394,10 +395,17 @@ interface AppContextType {
 
   // Self-Service Data Governance & Inline Row Editing
   lastDiscrepancyReport: DiscrepancyReport | null;
-  reconcileIntakeAndCourseLedger: () => DiscrepancyReport;
+  reconcileIntakeAndCourseLedger: (isSilent?: boolean) => DiscrepancyReport;
   updateIntakeInline: (id: string, updates: Partial<IntakeRecord>) => Promise<void>;
   updateCourseLedgerInline: (subId: string, updates: Partial<CourseEvaluationRecord>) => Promise<void>;
   manualInjectRecord: (type: 'intake' | 'evaluation', record: any) => Promise<void>;
+  deleteCourseEvaluationDirect: (idOrSubId: string) => Promise<void>;
+  deleteIntakeRecordDirect: (intakeId: string, cascadeEvaluations?: boolean) => Promise<void>;
+  batchUpdateCourseEvaluations: (ids: string[], updates: Partial<CourseEvaluationRecord>) => Promise<void>;
+  exportFullDatabaseJSON: () => void;
+  importFullDatabaseJSON: (backup: FullDatabaseBackup) => Promise<{ success: boolean; message: string }>;
+  repairOrphanEvaluations: () => DiscrepancyReport;
+  resetSessionData: (sessionToReset?: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -7114,6 +7122,241 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [addIntakeRecord, currentSession, showToast]
   );
 
+  const deleteCourseEvaluationDirect = useCallback(async (idOrSubId: string) => {
+    const existing = courseEvaluations.find((e) => e.subId === idOrSubId || e.id === idOrSubId);
+    setCourseEvaluations((prev) => {
+      const next = prev.filter((e) => e.subId !== idOrSubId && e.id !== idOrSubId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setAssignmentSubmissions((prev) => {
+      const next = prev.filter((s) => s.id !== idOrSubId && s.id !== existing?.subId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    showToast(`Course evaluation script removed.`, 'info');
+    logAuditEvent({
+      action: 'DATA_RECONCILED',
+      category: 'DATA_INTEGRITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+      role: currentRole,
+      session: existing?.session || currentSession,
+      targetIdentifier: idOrSubId,
+      summary: `Deleted course evaluation script ${existing?.courseCode || idOrSubId} for enrollment ${existing?.enrollmentNo || 'N/A'}`,
+      status: 'SUCCESS',
+    });
+  }, [courseEvaluations, currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]);
+
+  const deleteIntakeRecordDirect = useCallback(async (intakeId: string, cascadeEvaluations: boolean = true) => {
+    const existing = intakes.find((i) => i.id === intakeId || i.tokenNo === intakeId);
+    if (!existing) return;
+    setIntakes((prev) => {
+      const next = prev.filter((i) => i.id !== intakeId && i.tokenNo !== intakeId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.INTAKES, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    if (cascadeEvaluations) {
+      const enr = existing.enrollmentNo;
+      const sess = existing.session;
+      setCourseEvaluations((prev) => {
+        const next = prev.filter((e) => !(e.enrollmentNo === enr && normalizeSession(e.session) === normalizeSession(sess)));
+        try {
+          localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+      setAssignmentSubmissions((prev) => {
+        const next = prev.filter((s) => !(s.studentId === enr && normalizeSession(s.session) === normalizeSession(sess)));
+        try {
+          localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+    try {
+      await postDeleteIntake({ id: existing.id, enrollmentNo: existing.enrollmentNo, session: existing.session || currentSession });
+    } catch {}
+    showToast(`Intake receipt ${existing.tokenNo} deleted.`, 'info');
+    logAuditEvent({
+      action: 'INTAKE_DELETED',
+      category: 'ASSIGNMENT_INTAKE',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      role: currentRole,
+      session: existing.session || currentSession,
+      targetIdentifier: `${existing.tokenNo} (${existing.enrollmentNo})`,
+      summary: `Deleted intake receipt ${existing.tokenNo} (${existing.studentName})${cascadeEvaluations ? ' with linked course evaluations' : ''}`,
+      status: 'SUCCESS',
+    });
+  }, [intakes, currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]);
+
+  const batchUpdateCourseEvaluations = useCallback(async (ids: string[], updates: Partial<CourseEvaluationRecord>) => {
+    const idSet = new Set(ids);
+    setCourseEvaluations((prev) => {
+      const next = prev.map((e) => {
+        if (idSet.has(e.id) || (e.subId && idSet.has(e.subId))) {
+          return {
+            ...e,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return e;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    showToast(`Updated ${ids.length} course scripts in bulk.`, 'success');
+    logAuditEvent({
+      action: 'MARKS_UPDATED',
+      category: 'MARKS_EVALUATION',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      role: currentRole,
+      session: currentSession,
+      targetIdentifier: `${ids.length} Scripts`,
+      summary: `Bulk updated ${ids.length} scripts in Evaluation Ledger`,
+      status: 'SUCCESS',
+      details: updates,
+    });
+  }, [currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]);
+
+  const exportFullDatabaseJSON = useCallback(() => {
+    const payload: FullDatabaseBackup = {
+      version: '2.0.0',
+      exportedAt: new Date().toISOString(),
+      exportedBy: currentRole === 'ADMIN' ? `${settings.coordinatorName} (Admin)` : 'Staff User',
+      session: currentSession,
+      data: {
+        intakes,
+        courseEvaluations,
+        assignmentSubmissions,
+        evaluators,
+        packets,
+        bills,
+        settings,
+      },
+    };
+    const jsonStr = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.download = `IGNOU_SC2033_FULL_DATABASE_BACKUP_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Complete Database State exported to JSON successfully.', 'success');
+    logAuditEvent({
+      action: 'SESSION_ARCHIVED',
+      category: 'DATA_INTEGRITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+      role: currentRole,
+      session: currentSession,
+      summary: 'Downloaded complete JSON backup of system database',
+      status: 'SUCCESS',
+    });
+  }, [intakes, courseEvaluations, assignmentSubmissions, evaluators, packets, bills, settings, currentRole, currentSession, showToast, logAuditEvent]);
+
+  const importFullDatabaseJSON = useCallback(async (backup: FullDatabaseBackup): Promise<{ success: boolean; message: string }> => {
+    try {
+      if (!backup || !backup.data) {
+        return { success: false, message: 'Invalid backup format: missing data payload.' };
+      }
+      const d = backup.data;
+      if (Array.isArray(d.intakes)) {
+        setIntakes(d.intakes);
+        try { localStorage.setItem(STORAGE_KEYS.INTAKES, JSON.stringify(d.intakes)); } catch {}
+      }
+      if (Array.isArray(d.courseEvaluations)) {
+        setCourseEvaluations(d.courseEvaluations);
+        try { localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(d.courseEvaluations)); } catch {}
+      }
+      if (Array.isArray(d.assignmentSubmissions)) {
+        setAssignmentSubmissions(d.assignmentSubmissions);
+        try { localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS, JSON.stringify(d.assignmentSubmissions)); } catch {}
+      }
+      if (Array.isArray(d.evaluators)) {
+        setEvaluators(d.evaluators);
+        try { localStorage.setItem(STORAGE_KEYS.EVALUATORS, JSON.stringify(d.evaluators)); } catch {}
+      }
+      if (Array.isArray(d.packets)) {
+        setPackets(d.packets);
+        try { localStorage.setItem(STORAGE_KEYS.PACKETS, JSON.stringify(d.packets)); } catch {}
+      }
+      if (Array.isArray(d.bills)) {
+        setBills(d.bills);
+        try { localStorage.setItem(STORAGE_KEYS.BILLS, JSON.stringify(d.bills)); } catch {}
+      }
+      showToast('Database restored successfully from backup JSON file!', 'success');
+      logAuditEvent({
+        action: 'DATA_RECONCILED',
+        category: 'DATA_INTEGRITY',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+        role: currentRole,
+        session: currentSession,
+        summary: `Restored entire database from JSON backup (Exported: ${backup.exportedAt})`,
+        status: 'SUCCESS',
+      });
+      return { success: true, message: 'Database restored successfully.' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to restore backup.' };
+    }
+  }, [currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]);
+
+  const repairOrphanEvaluations = useCallback((): DiscrepancyReport => {
+    return reconcileIntakeAndCourseLedger(false);
+  }, [reconcileIntakeAndCourseLedger]);
+
+  const resetSessionData = useCallback((sessionToReset?: string) => {
+    const targetSession = sessionToReset || currentSession;
+    const normTarget = normalizeSession(targetSession);
+    
+    setIntakes((prev) => {
+      const next = prev.filter((i) => normalizeSession(i.session) !== normTarget);
+      try { localStorage.setItem(STORAGE_KEYS.INTAKES, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setCourseEvaluations((prev) => {
+      const next = prev.filter((e) => normalizeSession(e.session) !== normTarget);
+      try { localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setAssignmentSubmissions((prev) => {
+      const next = prev.filter((s) => normalizeSession(s.session) !== normTarget);
+      try { localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_SUBMISSIONS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setPackets((prev) => {
+      const next = prev.filter((p) => normalizeSession(p.session) !== normTarget);
+      try { localStorage.setItem(STORAGE_KEYS.PACKETS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setBills((prev) => {
+      const next = prev.filter((b) => normalizeSession(b.session) !== normTarget);
+      try { localStorage.setItem(STORAGE_KEYS.BILLS, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    showToast(`Session data for "${targetSession}" has been cleared.`, 'info');
+    logAuditEvent({
+      action: 'SETTINGS_UPDATED',
+      category: 'DATA_INTEGRITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Staff',
+      role: currentRole,
+      session: targetSession,
+      summary: `Cleared session records for cycle: ${targetSession}`,
+      status: 'SUCCESS',
+    });
+  }, [currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent]);
+
   return (
     <AppContext.Provider
       value={{
@@ -7318,6 +7561,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateIntakeInline,
         updateCourseLedgerInline,
         manualInjectRecord,
+        deleteCourseEvaluationDirect,
+        deleteIntakeRecordDirect,
+        batchUpdateCourseEvaluations,
+        exportFullDatabaseJSON,
+        importFullDatabaseJSON,
+        repairOrphanEvaluations,
+        resetSessionData,
       }}
     >
       {children}

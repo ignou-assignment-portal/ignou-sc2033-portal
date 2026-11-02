@@ -58,11 +58,14 @@ import {
   Plus,
   Pencil,
   UserPlus,
+  GraduationCap,
 } from 'lucide-react';
 import { OFFICIAL_APPS_SCRIPT_CODE, SCRIPT_URL } from '../services/sheetsService';
 import { IntegrityDebuggerPanel } from './IntegrityDebuggerPanel';
+import { DatabaseRecordEditor } from './DatabaseRecordEditor';
+import { CourseProgrammeMaster } from './CourseProgrammeMaster';
 
-type SettingsTabId = 'general' | 'appearance' | 'rates' | 'sync' | 'users' | 'debugger' | 'rbac';
+type SettingsTabId = 'general' | 'database_editor' | 'courses_catalog' | 'appearance' | 'rates' | 'sync' | 'users' | 'debugger' | 'rbac';
 
 export const SystemSettingsView: React.FC = () => {
   const {
@@ -635,6 +638,35 @@ export const SystemSettingsView: React.FC = () => {
 
         <button
           type="button"
+          onClick={() => setActiveTab('database_editor')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'database_editor'
+              ? 'bg-white text-indigo-950 shadow-xs border border-zinc-200'
+              : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50'
+          }`}
+        >
+          <Database className={`w-4 h-4 ${activeTab === 'database_editor' ? 'text-amber-600' : 'text-zinc-500'}`} />
+          <span>Database & Records</span>
+          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
+            Self-Service
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('courses_catalog')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+            activeTab === 'courses_catalog'
+              ? 'bg-white text-indigo-950 shadow-xs border border-zinc-200'
+              : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-200/50'
+          }`}
+        >
+          <GraduationCap className={`w-4 h-4 ${activeTab === 'courses_catalog' ? 'text-indigo-600' : 'text-zinc-500'}`} />
+          <span>Courses & Programmes</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('appearance')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'appearance'
@@ -725,6 +757,20 @@ export const SystemSettingsView: React.FC = () => {
           </span>
         </button>
       </div>
+
+      {/* TAB: DATABASE RECORD EDITOR */}
+      {activeTab === 'database_editor' && (
+        <div className="animate-in fade-in duration-200">
+          <DatabaseRecordEditor />
+        </div>
+      )}
+
+      {/* TAB: COURSES & PROGRAMMES MASTER */}
+      {activeTab === 'courses_catalog' && (
+        <div className="animate-in fade-in duration-200">
+          <CourseProgrammeMaster />
+        </div>
+      )}
 
       {/* TAB 1: GENERAL */}
       {activeTab === 'general' && (

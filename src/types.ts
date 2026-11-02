@@ -264,6 +264,8 @@ export interface CourseEvaluationRecord {
   Course_Code?: string;
   Course_Title?: string;
   Allotted_Evaluator?: string | null;
+  allottedEvaluator?: string | null;
+  candidateName?: string;
   Marks?: number | null;
   Grade?: string | null;
   Status?: string;
@@ -538,3 +540,45 @@ export interface DiscrepancyReport {
   duplicatesTrimmed?: number;
 }
 
+export interface CustomCourse {
+  code: string;
+  title: string;
+  programmeCode: string;
+  credits: number;
+  type: 'Assignment' | 'Practical' | 'Project';
+  maxMarks: number;
+  passMarks: number;
+  status?: 'Active' | 'Inactive';
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CustomProgramme {
+  code: string;
+  name: string;
+  degreeLevel?: 'Undergraduate' | 'Postgraduate' | 'Diploma' | 'Certificate';
+  school?: string;
+  durationYears?: number;
+  status?: 'Active' | 'Inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FullDatabaseBackup {
+  version: string;
+  exportedAt: string;
+  exportedBy: string;
+  session: string;
+  data: {
+    intakes: IntakeRecord[];
+    courseEvaluations: CourseEvaluationRecord[];
+    assignmentSubmissions: AssignmentSubmission[];
+    evaluators: Evaluator[];
+    packets: CoursePacket[];
+    bills: RemunerationBill[];
+    customCourses?: CustomCourse[];
+    customProgrammes?: CustomProgramme[];
+    settings?: any;
+  };
+}

@@ -197,8 +197,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Centre Configuration',
       icon: Settings,
       adminOnly: true,
-      badge: 'Admin',
-      badgeColor: 'bg-indigo-50 text-indigo-900 border-indigo-200',
+      badge: 'Controls & DB',
+      badgeColor: 'bg-amber-50 text-amber-900 border-amber-200',
     },
   ];
 
