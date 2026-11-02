@@ -603,6 +603,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between text-[10px]">
+                <span>Assignment Scripts:</span>
+                <span className="font-mono text-indigo-700 font-bold">
+                  {evalCount} Scripts ({intakeCount} Receipts)
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
                 <span>Role Mode:</span>
                 <span
                   className={`font-bold ${

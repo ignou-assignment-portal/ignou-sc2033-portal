@@ -5573,8 +5573,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         });
 
-        // 2. Universal Normalizer: Course Ledger
-        const cleanLedger = rawLedger
+        // 2. Universal Normalizer: Course Ledger (with autonomous column-shift self-healing)
+        const healedLedger = rawLedger.map((r: any) => {
+          if (!r) return r;
+          let enr = (r.Enrollment_No || r.enrollmentNo || r["Enrollment No"] || "").toString().replace(/^'/, '').trim();
+          let rawCourse = (r.Course_Code || r.courseCode || r["Course Code"] || "").toString().trim();
+          let subId = (r.Sub_ID || r.subId || r.id || "").toString().trim();
+          let cand = (r.Candidate_Name || r.candidateName || r["Candidate Name"] || r.studentName || "").toString().trim();
+          let prog = (r.Programme || r.programme || r.programmeCode || "").toString().trim();
+          let evalName = (r.Allotted_Evaluator || r.allottedEvaluator || r.evaluatorName || "").toString().trim();
+          let marks = (r.Marks !== undefined && r.Marks !== "") ? r.Marks : (r.marks !== undefined ? r.marks : "");
+          let grade = (r.Grade !== undefined && r.Grade !== "") ? r.Grade : (r.grade !== undefined ? r.grade : "");
+          let status = (r.Status || r.status || "Pending").toString().trim();
+
+          // Heal Pattern 1: Column shift where Course Code was shifted into Marks column (e.g. "MPSE-1", "MEG-01", "BRL-101")
+          if (!rawCourse && marks && /^[A-Z]{2,6}[-_]?\d{1,4}[A-Z]?$/i.test(String(marks).trim())) {
+            rawCourse = String(marks).trim().toUpperCase();
+            marks = "";
+            if (evalName && /^[A-Z]{2,6}$/i.test(evalName)) {
+              prog = evalName.toUpperCase();
+            }
+            if (grade && grade.toLowerCase().includes('unallotted')) {
+              evalName = 'Unallotted';
+              grade = '';
+            } else if (grade) {
+              evalName = grade;
+              grade = '';
+            } else {
+              evalName = 'Unallotted';
+            }
+          }
+
+          // Heal Pattern 2: Extract Course Code from Sub_ID if Course_Code is empty (e.g. SUB_2451540543_MPSE-1_JULY2026)
+          if (!rawCourse && subId) {
+            const match = subId.match(/SUB_\d+_([A-Z0-9\-]+?)(?:_PRAC)?_(?:JULY|JANUARY|JUL|JAN)/i);
+            if (match && match[1]) {
+              rawCourse = match[1].toUpperCase();
+            }
+          }
+
+          // Heal Pattern 3: If programme was populated with a phone number (e.g. 8732038231), heal it
+          if (/^\d{7,15}$/.test(prog)) {
+            const matchingIntake = cleanIntake.find((it: any) => String(it.enrollmentNo).trim() === enr);
+            if (matchingIntake && matchingIntake.programme) {
+              prog = matchingIntake.programme;
+            } else if (evalName && /^[A-Z]{2,6}$/i.test(evalName)) {
+              prog = evalName.toUpperCase();
+            } else {
+              prog = 'IGNOU';
+            }
+          }
+
+          return {
+            ...r,
+            Enrollment_No: enr,
+            enrollmentNo: enr,
+            Course_Code: rawCourse,
+            courseCode: rawCourse,
+            Candidate_Name: cand,
+            candidateName: cand,
+            Programme: prog || 'IGNOU',
+            programme: prog || 'IGNOU',
+            programmeCode: prog || 'IGNOU',
+            Allotted_Evaluator: evalName || 'Unallotted',
+            allottedEvaluator: evalName || 'Unallotted',
+            Marks: marks,
+            marks: marks,
+            Grade: grade,
+            grade: grade,
+            Status: status || 'Pending',
+            status: status || 'Pending',
+            Sub_ID: subId,
+            subId: subId,
+          };
+        });
+
+        const cleanLedger = healedLedger
           .filter((r: any) => {
             if (!r) return false;
             const enr = String(r.Enrollment_No || r.enrollmentNo || r["Enrollment No"] || "").trim();

@@ -426,7 +426,20 @@ export const IntegrityDebuggerPanel: React.FC = () => {
       const enr = String(r?.Enrollment_No || r?.enrollmentNo || r?.['Enrollment No'] || '')
         .replace(/^'/, '')
         .trim();
-      const rawCourse = String(r?.Course_Code || r?.courseCode || r?.['Course Code'] || '').trim();
+      let rawCourse = String(r?.Course_Code || r?.courseCode || r?.['Course Code'] || '').trim();
+      const subId = String(r?.Sub_ID || r?.subId || r?.id || '').trim();
+      const rawMarks = (r?.Marks !== undefined && r?.Marks !== '') ? String(r.Marks).trim() : '';
+
+      // Heal column-shifted rows where Course Code was placed in Marks or embedded in Sub_ID
+      if (!rawCourse && rawMarks && /^[A-Z]{2,6}[-_]?\d{1,4}[A-Z]?$/i.test(rawMarks)) {
+        rawCourse = rawMarks.toUpperCase();
+      } else if (!rawCourse && subId) {
+        const match = subId.match(/SUB_\d+_([A-Z0-9\-]+?)(?:_PRAC)?_(?:JULY|JANUARY|JUL|JAN)/i);
+        if (match && match[1]) {
+          rawCourse = match[1].toUpperCase();
+        }
+      }
+
       const cleanCourse = rawCourse
         .replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '')
         .trim()
@@ -434,7 +447,6 @@ export const IntegrityDebuggerPanel: React.FC = () => {
       const cand = String(
         r?.Candidate_Name || r?.candidateName || r?.['Candidate Name'] || r?.studentName || ''
       ).trim();
-      const subId = String(r?.Sub_ID || r?.subId || r?.id || '').trim();
       const rawSess = String(r?.Session || r?.session || '');
       const normSess = normalizeSessionName(rawSess || 'July 2026', subId);
 
