@@ -14,7 +14,11 @@ import {
   Clock,
   CheckCircle2,
   FileSpreadsheet,
+  Printer,
+  Users,
 } from 'lucide-react';
+import { PacketDispatchSlipModal, ScriptEntry } from './PacketDispatchSlipModal';
+import { normalizeSessionName } from '../services/sheetsService';
 
 export const CourseLedgerView: React.FC = () => {
   const {
@@ -29,6 +33,7 @@ export const CourseLedgerView: React.FC = () => {
     updatePacket,
     isAdmin,
     reconcileIntakeAndCourseLedger,
+    getCourseTitle,
   } = useApp();
 
   const [ledgerScope, setLedgerScope] = useState<'ALL' | 'SESSION'>('ALL');
@@ -38,6 +43,60 @@ export const CourseLedgerView: React.FC = () => {
   const [scriptCountInput, setScriptCountInput] = useState<number>(20);
   const [expectedReturnDate, setExpectedReturnDate] = useState('');
   const [packetNotes, setPacketNotes] = useState('');
+
+  // Dispatch Slip Modal State
+  const [isDispatchSlipOpen, setIsDispatchSlipOpen] = useState(false);
+  const [selectedPacketForSlip, setSelectedPacketForSlip] = useState<CoursePacket | null>(null);
+  const [slipScripts, setSlipScripts] = useState<ScriptEntry[]>([]);
+
+  // Helper to extract exact candidate scripts received for a given course code
+  const getCourseScripts = (courseCode: string): ScriptEntry[] => {
+    if (!courseCode) return [];
+    const normCode = courseCode.trim().toUpperCase();
+    const evals = (allCourseEvaluations && allCourseEvaluations.length > 0 ? allCourseEvaluations : sessionCourseEvaluations);
+    const matched = evals.filter((e) => {
+      const code = (e.courseCode || (e as any).Course_Code || '').trim().toUpperCase();
+      if (code !== normCode) return false;
+      if (ledgerScope === 'ALL') return true;
+      return normalizeSessionName(e.session || (e as any).Session) === normalizeSessionName(currentSession);
+    });
+
+    if (matched.length > 0) {
+      return matched.map((e, idx) => ({
+        sno: idx + 1,
+        enrollmentNo: e.enrollmentNo || (e as any).Enrollment_No || '',
+        studentName: e.studentName || (e as any).Candidate_Name || '',
+        tokenNo: e.tokenNo || `SC2033-${e.enrollmentNo}`,
+        submissionDate: e.submissionDate || e.receiptDate || '',
+        marks: e.marks,
+      }));
+    }
+
+    const activeIntakes = ledgerScope === 'ALL'
+      ? (allIntakes && allIntakes.length > 0 ? allIntakes : sessionIntakes)
+      : sessionIntakes;
+    const fromIntakes: ScriptEntry[] = [];
+    activeIntakes.forEach((it: any) => {
+      const courses = (it.courseCodes || it.courses || []).map((c: string) => String(c).trim().toUpperCase());
+      if (courses.includes(normCode)) {
+        fromIntakes.push({
+          sno: fromIntakes.length + 1,
+          enrollmentNo: it.enrollmentNo,
+          studentName: it.studentName || it.candidateName || '',
+          tokenNo: it.tokenNo,
+          submissionDate: it.submissionDate || it.receiptDate,
+          marks: it.marks?.[normCode] ?? null,
+        });
+      }
+    });
+    return fromIntakes;
+  };
+
+  // Enrolled candidate scripts for the currently selected packet course
+  const selectedCourseScripts = useMemo(() => {
+    if (!selectedCourseForPacket) return [];
+    return getCourseScripts(selectedCourseForPacket);
+  }, [selectedCourseForPacket, allCourseEvaluations, sessionCourseEvaluations, allIntakes, sessionIntakes, ledgerScope, currentSession]);
 
   // Course aggregation summary based on selected ledgerScope
   const courseLedger = useMemo(() => {
@@ -135,7 +194,11 @@ export const CourseLedgerView: React.FC = () => {
   const handleOpenPacketModal = (courseCode: string, suggestedCount: number) => {
     if (!isAdmin) return;
     setSelectedCourseForPacket(courseCode);
-    setScriptCountInput(suggestedCount > 0 ? suggestedCount : 20);
+
+    // Auto-fill scripts in this packet as per actual scripts received
+    const actualScripts = getCourseScripts(courseCode);
+    const totalCount = actualScripts.length > 0 ? actualScripts.length : (suggestedCount > 0 ? suggestedCount : 1);
+    setScriptCountInput(totalCount);
 
     // Auto-select eligible evaluator if any
     const eligible = evaluators.find((e) => e.eligibleCourses.includes(courseCode));
@@ -155,7 +218,7 @@ export const CourseLedgerView: React.FC = () => {
 
     const courseItem = courseLedger.find((c) => c.courseCode === selectedCourseForPacket);
 
-    createPacket({
+    const createdPkt = createPacket({
       courseCode: selectedCourseForPacket,
       programmeCode: courseItem?.programmeCode || 'IGNOU',
       evaluatorId: selectedEvaluatorId || null,
@@ -163,6 +226,12 @@ export const CourseLedgerView: React.FC = () => {
       expectedReturnDate,
       notes: packetNotes.trim() || undefined,
     });
+
+    // Automatically trigger the printable Dispatch Slip modal immediately
+    const scriptsForSlip = getCourseScripts(selectedCourseForPacket);
+    setSelectedPacketForSlip(createdPkt);
+    setSlipScripts(scriptsForSlip);
+    setIsDispatchSlipOpen(true);
 
     setIsPacketModalOpen(false);
     setSelectedCourseForPacket('');
@@ -429,11 +498,24 @@ export const CourseLedgerView: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Packet status toggle for admin */}
-                  {isAdmin && (
-                    <div className="pt-2 border-t border-zinc-200 flex items-center justify-between">
-                      <span className="text-[10px] text-zinc-500 font-bold uppercase">Change Status:</span>
-                      <div className="flex gap-1">
+                  {/* Packet actions: Print Slip & Status Toggles */}
+                  <div className="pt-2 border-t border-zinc-200 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPacketForSlip(pkt);
+                        setSlipScripts(getCourseScripts(pkt.courseCode));
+                        setIsDispatchSlipOpen(true);
+                      }}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                      title="Print Official Packet Dispatch Slip"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Print Dispatch Slip</span>
+                    </button>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleUpdatePacketStatus(pkt.id, 'Dispatched')}
                           className={`px-2 py-1 rounded text-[10px] font-semibold transition ${
@@ -455,8 +537,8 @@ export const CourseLedgerView: React.FC = () => {
                           Evaluated
                         </button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -466,43 +548,129 @@ export const CourseLedgerView: React.FC = () => {
 
       {/* Packet Creation Modal (Admin Only) */}
       {isPacketModalOpen && (
-        <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-zinc-200">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
+        <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-zinc-200 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 shrink-0">
               <div className="flex items-center gap-2 font-bold text-zinc-900 text-sm">
                 <PackageCheck className="w-4 h-4 text-indigo-600" />
                 Form Evaluation Packet ({selectedCourseForPacket})
               </div>
               <button
+                type="button"
                 onClick={() => setIsPacketModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold"
+                className="text-zinc-400 hover:text-zinc-700 text-xs font-bold p-1 rounded-md hover:bg-zinc-100 transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleCreatePacketSubmit} className="mt-4 space-y-4 text-xs">
-              <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
-                <span className="font-semibold text-indigo-900">Course Code: </span>
-                <span className="font-mono font-bold text-indigo-950">{selectedCourseForPacket}</span>
-                <div className="text-[11px] text-indigo-700 mt-0.5">
-                  Packets group physical scripts together with an official award list sheet.
+            <form onSubmit={handleCreatePacketSubmit} className="mt-4 space-y-4 text-xs overflow-y-auto pr-1">
+              {/* Course header banner */}
+              <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Course Code</span>
+                    <span className="font-mono font-bold text-sm text-indigo-950 bg-white px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
+                      {selectedCourseForPacket}
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded border border-emerald-300">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    {selectedCourseScripts.length} Actual Scripts Received
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-indigo-900">
+                  {getCourseTitle(selectedCourseForPacket)}
+                </div>
+                <div className="text-[11px] text-indigo-700">
+                  Packets group physical scripts together with an official award list sheet and printable dispatch docket.
                 </div>
               </div>
 
+              {/* Script count field */}
               <div>
-                <label className="block font-semibold text-zinc-700 mb-1">
-                  Scripts in this Packet <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={scriptCountInput}
-                  onChange={(e) => setScriptCountInput(parseInt(e.target.value, 10) || 1)}
-                  className="w-full px-3 py-1.5 border border-zinc-300 rounded-lg font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  required
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-zinc-700">
+                    Scripts in this Packet <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-zinc-500">
+                    Auto-filled from received intake: <strong className="text-indigo-600">{selectedCourseScripts.length}</strong>
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={1}
+                    max={250}
+                    value={scriptCountInput}
+                    onChange={(e) => setScriptCountInput(parseInt(e.target.value, 10) || 1)}
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-lg font-bold text-sm text-zinc-900 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                    required
+                  />
+                  {scriptCountInput !== selectedCourseScripts.length && selectedCourseScripts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setScriptCountInput(selectedCourseScripts.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded border border-indigo-200 transition cursor-pointer"
+                    >
+                      Reset to {selectedCourseScripts.length}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Itemized scripts preview */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5 font-semibold text-zinc-700">
+                    <Users className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Scripts in this Packet as Received ({selectedCourseScripts.length})</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400">Printed on dispatch slip docket</span>
+                </div>
+
+                {selectedCourseScripts.length === 0 ? (
+                  <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-center text-zinc-500 text-[11px]">
+                    No individual student scripts recorded in the intake ledger yet for {selectedCourseForPacket}.
+                  </div>
+                ) : (
+                  <div className="border border-zinc-200 rounded-lg overflow-hidden bg-white max-h-36 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead className="bg-zinc-50 sticky top-0 border-b border-zinc-200 text-zinc-600">
+                        <tr>
+                          <th className="py-1 px-2 font-bold w-8 text-center">#</th>
+                          <th className="py-1 px-2 font-bold">Enrollment No</th>
+                          <th className="py-1 px-2 font-bold">Candidate Name</th>
+                          <th className="py-1 px-2 font-bold">Token / Receipt</th>
+                          <th className="py-1 px-2 font-bold text-right">Status / Marks</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100 font-mono">
+                        {selectedCourseScripts.map((s, idx) => (
+                          <tr key={`${s.enrollmentNo}-${idx}`} className="hover:bg-zinc-50/80 transition-colors">
+                            <td className="py-1 px-2 text-center text-zinc-400 font-sans">{idx + 1}</td>
+                            <td className="py-1 px-2 font-bold text-zinc-800">{s.enrollmentNo}</td>
+                            <td className="py-1 px-2 font-sans font-medium text-zinc-700 truncate max-w-[130px]">
+                              {s.studentName || '—'}
+                            </td>
+                            <td className="py-1 px-2 text-[10px] text-zinc-500 truncate">
+                              {s.tokenNo || (s.submissionDate ? formatDate(s.submissionDate) : '—')}
+                            </td>
+                            <td className="py-1 px-2 text-right font-sans">
+                              {s.marks !== null && s.marks !== undefined ? (
+                                <span className="text-emerald-700 font-bold">{s.marks}/100</span>
+                              ) : (
+                                <span className="text-amber-700 text-[10px] font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -512,7 +680,7 @@ export const CourseLedgerView: React.FC = () => {
                 <select
                   value={selectedEvaluatorId}
                   onChange={(e) => setSelectedEvaluatorId(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-zinc-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                 >
                   <option value="">-- Unassigned (Form packet only) --</option>
                   {evaluators.map((ev) => {
@@ -534,7 +702,7 @@ export const CourseLedgerView: React.FC = () => {
                   type="date"
                   value={expectedReturnDate}
                   onChange={(e) => setExpectedReturnDate(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                 />
               </div>
 
@@ -547,29 +715,48 @@ export const CourseLedgerView: React.FC = () => {
                   placeholder="e.g. Cloth envelope dispatched by runner"
                   value={packetNotes}
                   onChange={(e) => setPacketNotes(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  className="w-full px-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
                 />
               </div>
 
-              <div className="pt-3 border-t border-zinc-100 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPacketModalOpen(false)}
-                  className="px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 rounded-lg font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs"
-                >
-                  Create & Dispatch Packet
-                </button>
+              <div className="pt-3 border-t border-zinc-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <span className="text-[11px] text-zinc-500 flex items-center gap-1">
+                  <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                  Dispatch slip will open immediately for printing
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsPacketModalOpen(false)}
+                    className="px-3 py-1.5 text-zinc-600 hover:bg-zinc-100 rounded-lg font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <PackageCheck className="w-4 h-4" />
+                    Create & Open Dispatch Slip
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Printable Packet Dispatch Slip Modal */}
+      <PacketDispatchSlipModal
+        isOpen={isDispatchSlipOpen}
+        onClose={() => {
+          setIsDispatchSlipOpen(false);
+          setSelectedPacketForSlip(null);
+        }}
+        packet={selectedPacketForSlip}
+        evaluator={selectedPacketForSlip ? getEvaluatorInfo(selectedPacketForSlip.evaluatorId) : null}
+        scripts={slipScripts}
+      />
     </div>
   );
 };
