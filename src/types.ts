@@ -105,6 +105,7 @@ export interface CoursePacket {
   returnedDate: string | null;
   status: 'Formed' | 'Dispatched' | 'Evaluated' | 'Archived';
   notes?: string;
+  assignedEnrollments?: string[];
 }
 
 export interface RemunerationBill {

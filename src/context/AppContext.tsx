@@ -239,7 +239,7 @@ interface AppContextType {
   coursePackets: CoursePacket[];
   setCoursePackets: React.Dispatch<React.SetStateAction<CoursePacket[]>>;
   sessionPackets: CoursePacket[];
-  createPacket: (data: { courseCode: string; programmeCode: string; evaluatorId: string | null; scriptCount: number; expectedReturnDate?: string; notes?: string }) => CoursePacket;
+  createPacket: (data: { courseCode: string; programmeCode: string; evaluatorId: string | null; scriptCount: number; expectedReturnDate?: string; notes?: string; assignedEnrollments?: string[] }) => CoursePacket;
   updatePacket: (id: string, updates: Partial<CoursePacket>) => void;
   deletePacket: (id: string) => void;
 
@@ -5200,7 +5200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Course Packets
   const createPacket = useCallback(
-    (data: { courseCode: string; programmeCode: string; evaluatorId: string | null; scriptCount: number; expectedReturnDate?: string; notes?: string }) => {
+    (data: { courseCode: string; programmeCode: string; evaluatorId: string | null; scriptCount: number; expectedReturnDate?: string; notes?: string; assignedEnrollments?: string[] }) => {
       const sessionCode = generateSessionCode(currentSession);
       const cleanCode = data.courseCode.replace(/[^a-zA-Z0-9]/g, '');
       const existingPackets = packets.filter((p) => p.session === currentSession && p.courseCode === data.courseCode);
@@ -5219,6 +5219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         returnedDate: null,
         status: data.evaluatorId ? 'Dispatched' : 'Formed',
         notes: data.notes,
+        assignedEnrollments: data.assignedEnrollments || [],
       };
 
       setPackets((prev) => [newPacket, ...prev]);
