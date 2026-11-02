@@ -87,6 +87,14 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ onViewHome }) => {
               {isAdmin && activeTab === 'INTEGRITY_AUDIT' && <IntegrityAuditView />}
               {isAdmin && activeTab === 'AUDIT_TRAIL' && <AuditTrail />}
               {isAdmin && activeTab === 'SETTINGS' && <SystemSettingsView />}
+              {/* Fallback to Intake Desk if activeTab is unrecognized or unauthorized */}
+              {activeTab !== 'INTAKE_DESK' &&
+               activeTab !== 'EVALUATION_MASTER' &&
+               (!isAdmin || ![
+                 'SUBMISSIONS_TRACKER', 'INTAKE_REGISTER', 'SED_AWARD_SHEETS',
+                 'MARKS_ENTRY', 'COURSE_LEDGER', 'EVALUATORS',
+                 'REMUNERATION', 'INTEGRITY_AUDIT', 'AUDIT_TRAIL', 'SETTINGS'
+               ].includes(activeTab)) && <IntakeDesk />}
             </ErrorBoundary>
           </main>
 
@@ -188,6 +196,13 @@ const MainApp: React.FC = () => {
 
       {/* Fallback if unauthenticated and somehow on dashboard view */}
       {viewMode === 'dashboard' && !isAuthenticated && (
+        <StudyCentreHomePage
+          onOpenGatekeeper={() => setViewMode('gatekeeper')}
+        />
+      )}
+
+      {/* Safety Fallback to Home if viewMode is unrecognized */}
+      {viewMode !== 'home' && viewMode !== 'gatekeeper' && (viewMode !== 'dashboard' || !isAuthenticated) && (
         <StudyCentreHomePage
           onOpenGatekeeper={() => setViewMode('gatekeeper')}
         />

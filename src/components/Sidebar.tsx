@@ -586,8 +586,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 isSyncingSheets ? 'animate-ping' : ''
               }`}
             />
-            <span>
-              {syncStatus || (isSyncingSheets ? 'Syncing...' : 'Sync Google Sheets')}
+            <span className="truncate">
+              {isSyncingSheets
+                ? 'Syncing...'
+                : syncStatus && syncStatus.includes('admissions') && syncStatus.includes('receipts')
+                ? syncStatus.replace(/\d+\s+scripts/i, `${evalCount} scripts`)
+                : (syncStatus || 'Sync Google Sheets')}
             </span>
           </button>
         </div>

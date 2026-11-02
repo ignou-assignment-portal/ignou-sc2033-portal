@@ -748,8 +748,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return sessionStorage.getItem("ignou_sc2033_role") || "desk";
   });
   const [securityPins, setSecurityPins] = useState<{ deskPin: string; adminPin: string }>(() => {
-    const saved = localStorage.getItem("ignou_sc2033_pins");
-    return saved ? JSON.parse(saved) : { deskPin: "1001", adminPin: "2033" };
+    try {
+      const saved = localStorage.getItem("ignou_sc2033_pins");
+      return saved ? JSON.parse(saved) : { deskPin: "1001", adminPin: "2033" };
+    } catch {
+      return { deskPin: "1001", adminPin: "2033" };
+    }
   });
 
   const [securityCredentials, setSecurityCredentials] = useState<SecurityCredentials>(() => {
@@ -5787,8 +5791,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return [...cleanIntake, ...localPending];
         });
 
+        // Synthesize any missing course scripts from cleanIntake into completeCleanLedger:
+        // Every student intake receipt represents actual physical scripts submitted at the intake desk.
+        const existingLedgerKeySet = new Set<string>();
+        cleanLedger.forEach((cl: any) => {
+          const enr = String(cl.enrollmentNo || cl.Enrollment_No || '').trim().toUpperCase();
+          const code = String(cl.courseCode || cl.Course_Code || '').trim().toUpperCase();
+          const sess = normalizeSession(cl.session || cl.Session || '');
+          const isPrac = Boolean(cl.isPractical || cl.componentType === 'Practical');
+          if (enr && code) {
+            existingLedgerKeySet.add(`${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`);
+            existingLedgerKeySet.add(`${enr}_${code}_${sess}`);
+            existingLedgerKeySet.add(`${enr}_${code}`);
+            if (cl.subId || cl.Sub_ID) {
+              existingLedgerKeySet.add(String(cl.subId || cl.Sub_ID).trim());
+            }
+          }
+        });
+
+        const synthesizedFromIntakesForLedger: CourseEvaluationRecord[] = [];
+        cleanIntake.forEach((intake: any) => {
+          const enr = String(intake.enrollmentNo || intake.Enrollment_No || '').replace(/^'/, '').trim().toUpperCase();
+          const cand = String(intake.studentName || intake.candidateName || intake.Candidate_Name || '').trim();
+          const prog = String(intake.programmeCode || intake.programme || intake.Programme || 'IGNOU').trim().toUpperCase();
+          const sess = intake.session || intake.Session || 'July 2026';
+          const normSess = normalizeSession(sess);
+          const subDate = intake.submissionDate || intake.receiptDate || new Date().toISOString().split('T')[0];
+
+          const rawCourses = intake.courses || intake.courseCodes || intake.Courses || [];
+          const courseList: string[] = (Array.isArray(rawCourses) ? rawCourses.flatMap((c: any) => String(c).split(',')) : String(rawCourses).split(','))
+            .map((c: string) => c.trim().toUpperCase())
+            .filter(Boolean);
+
+          const pracSet = new Set((intake.practicalCourses || []).map((c: string) => String(c).trim().toUpperCase()));
+          const asgnSet = new Set((intake.assignmentCourses || []).map((c: string) => String(c).trim().toUpperCase()));
+
+          courseList.forEach((rawC: string) => {
+            const cleanCourse = rawC.replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '').trim().toUpperCase();
+            if (!cleanCourse) return;
+            const isBrl = /^BRL[-_]?\d+/i.test(cleanCourse);
+            let isPrac = false;
+            if (!isBrl) {
+              if (pracSet.has(cleanCourse)) isPrac = true;
+              else if (!asgnSet.has(cleanCourse) && isPracticalCourse(cleanCourse)) isPrac = true;
+            }
+
+            const compKey = `${enr}_${cleanCourse}_${normSess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+            const basicKey = `${enr}_${cleanCourse}_${normSess}`;
+            const enrCourseKey = `${enr}_${cleanCourse}`;
+
+            if (!existingLedgerKeySet.has(compKey) && !existingLedgerKeySet.has(basicKey) && !existingLedgerKeySet.has(enrCourseKey)) {
+              existingLedgerKeySet.add(compKey);
+              existingLedgerKeySet.add(basicKey);
+              existingLedgerKeySet.add(enrCourseKey);
+
+              const subSuffix = isPrac ? '_PRAC' : '';
+              const subId = `SUB_${enr}_${cleanCourse}${subSuffix}_${sess.replace(/\s+/g, '')}`;
+              existingLedgerKeySet.add(subId);
+              const markVal = intake.marks?.[cleanCourse] ?? null;
+              const gradeInfo = calculateIGNOUGrade(markVal);
+              const resolvedTitle = getCourseTitle(cleanCourse, prog);
+
+              const newRow: CourseEvaluationRecord = {
+                id: subId,
+                subId,
+                Sub_ID: subId,
+                submissionKey: subId,
+                intakeId: intake.id,
+                tokenNo: intake.tokenNo,
+                enrollmentNo: enr,
+                studentName: cand,
+                candidateName: cand,
+                programmeCode: prog,
+                courseCode: cleanCourse,
+                courseTitle: resolvedTitle,
+                session: sess,
+                status: (markVal !== null ? 'Evaluated' : 'Pending Allotment') as EvaluationStatus,
+                marks: markVal,
+                grade: gradeInfo.grade,
+                gradeLabel: gradeInfo.label || null,
+                evaluatorId: null,
+                allottedEvaluator: 'Unallotted',
+                allottedDate: null,
+                isLocked: false,
+                lockedAt: null,
+                lockedBy: null,
+                submissionDate: subDate,
+                receiptDate: subDate,
+                componentType: isPrac ? 'Practical' : 'Assignment',
+                isPractical: isPrac,
+                updatedAt: new Date().toISOString(),
+                // Dual-key fallbacks
+                Session: sess,
+                Enrollment_No: enr,
+                Candidate_Name: cand,
+                Programme: prog,
+                Programme_Code: prog,
+                Course_Code: cleanCourse,
+                Allotted_Evaluator: 'Unallotted',
+                Marks: markVal,
+                Grade: gradeInfo.grade,
+                Status: markVal !== null ? 'Evaluated' : 'Pending Allotment',
+                Submission_Date: subDate,
+                submissionMode: (intake.submissionMode as any) || 'In-Person (Desk)',
+              };
+              synthesizedFromIntakesForLedger.push(newRow);
+            }
+          });
+        });
+
+        const completeCleanLedger = [...cleanLedger, ...synthesizedFromIntakesForLedger];
+
         setCourseEvaluations((prevEvals) => {
-          const remoteSubIds = new Set((cleanLedger as any[]).map((c: any) => String(c.subId || c.Sub_ID || c.id || '').trim()));
+          const remoteSubIds = new Set((completeCleanLedger as any[]).map((c: any) => String(c.subId || c.Sub_ID || c.id || '').trim()));
           const localPending = (prevEvals || []).filter((loc: any) => {
             if (!loc) return false;
             const sId = String(loc.subId || loc.Sub_ID || loc.id || '').trim();
@@ -5796,7 +5911,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (isDummyEvaluationId(loc.id || loc.subId, loc.intakeId, loc.enrollmentNo, loc.candidateName || loc.studentName)) return false;
             return true;
           });
-          return [...cleanLedger, ...localPending];
+          return [...completeCleanLedger, ...localPending];
         });
 
         // Also update Registration Receipts so receipts view has latest entries
@@ -5871,10 +5986,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
 
         // Also update Assignment Submissions so Course Submissions Tracker is hydrated
-        // Build directly from cleanLedger so NO dummy mock entries persist!
+        // Build directly from completeCleanLedger so all actual scripts are represented!
         setAssignmentSubmissions(() => {
           const map = new Map<string, AssignmentSubmission>();
-          cleanLedger.forEach((cl: any) => {
+          completeCleanLedger.forEach((cl: any) => {
             const id = cl.subId || `sub-${cl.enrollmentNo}-${cl.courseCode}`;
             map.set(id, {
               id,
@@ -5902,9 +6017,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // 4. Update LocalStorage Cache immediately so data survives reloads & login
         localStorage.setItem("ignou_sc2033_intake", JSON.stringify(cleanIntake));
-        localStorage.setItem("ignou_sc2033_ledger", JSON.stringify(cleanLedger));
+        localStorage.setItem("ignou_sc2033_ledger", JSON.stringify(completeCleanLedger));
         localStorage.setItem(STORAGE_KEYS.INTAKES, JSON.stringify(cleanIntake));
-        localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(cleanLedger));
+        localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(completeCleanLedger));
 
         // Hydrate Student Registrations (Fresh Admissions 1st Year & Re-Registrations for Assignment Intake)
         // Parse from Google Sheets studentRegistrations / freshAdmissions / reRegistrations
@@ -6013,7 +6128,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        const syncMsg = `Synced (${incomingRegs.length} admissions, ${cleanIntake.length} receipts, ${cleanLedger.length} scripts)`;
+        const syncMsg = `Synced (${incomingRegs.length} admissions, ${cleanIntake.length} receipts, ${completeCleanLedger.length} scripts)`;
         setSyncStatus(syncMsg);
 
         const now = new Date();
