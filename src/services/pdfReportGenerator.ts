@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { IntakeRecord } from '../types';
+import { IntakeRecord, CoursePacket, Evaluator, ScriptEntry } from '../types';
 import { IGNOU_PROGRAMMES } from '../data/ignouMasterData';
 import { formatDate } from '../utils/helpers';
 
@@ -361,3 +361,332 @@ export function downloadStudentIntakePDF(
   const filename = `IGNOU_SC2033_Intake_Summary_${cleanSession}_${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(filename);
 }
+
+export interface PacketSlipPDFOptions {
+  studyCentreName?: string;
+  studyCentreCode?: string;
+  regionalCentre?: string;
+  coordinatorName?: string;
+  courseTitle?: string;
+  reportRef?: string;
+}
+
+/**
+ * Generates an official IGNOU Evaluation Packet Dispatch Memo & Docket Slip in A4 portrait PDF format.
+ * Includes complete institutional header, docket metadata, evaluator details, itemized candidate scripts table with marks box,
+ * statutory guidelines, and tri-signature blocks.
+ */
+export function generatePacketDispatchSlipPDF(
+  packet: CoursePacket,
+  evaluator: Evaluator | null,
+  scripts: ScriptEntry[],
+  options: PacketSlipPDFOptions = {}
+): jsPDF {
+  const {
+    studyCentreName = "S.D. Jain Girls' College, Dimapur - 797112, Nagaland",
+    studyCentreCode = 'SC-2033',
+    regionalCentre = 'RC-20 Kohima',
+    coordinatorName = 'Dr. Sant K. Gupta',
+    courseTitle = '',
+  } = options;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const usableWidth = pageWidth - margin * 2; // 186mm
+
+  let currentY = 14;
+
+  // 1. INSTITUTIONAL HEADER
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text('INDIRA GANDHI NATIONAL OPEN UNIVERSITY', pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 5.5;
+  doc.setFontSize(10.5);
+  doc.setTextColor(30, 41, 59); // slate-800
+  doc.text(`IGNOU STUDY CENTRE ${studyCentreCode}`, pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 4.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105); // slate-600
+  doc.text(studyCentreName, pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 4;
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text(`Regional Centre: ${regionalCentre}  •  Academic Session: ${packet.session}`, pageWidth / 2, currentY, { align: 'center' });
+
+  // 2. DOCKET TITLE BANNER
+  currentY += 5;
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.roundedRect(margin, currentY, usableWidth, 7, 1, 1, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('EVALUATION PACKET DISPATCH MEMO & ENVELOPE DOCKET SLIP', pageWidth / 2, currentY + 4.8, { align: 'center' });
+
+  currentY += 10;
+
+  // 3. METADATA GRID BOX (4 Columns x 2 Rows)
+  const metaBoxHeight = 25;
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.setDrawColor(203, 213, 225); // slate-300
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, currentY, usableWidth, metaBoxHeight, 1.5, 1.5, 'FD');
+
+  const col1 = margin + 3;
+  const col2 = margin + 49;
+  const col3 = margin + 98;
+  const col4 = margin + 144;
+
+  const row1Y = currentY + 4.5;
+  const row2Y = currentY + 9.5;
+  const row3Y = currentY + 15.5;
+  const row4Y = currentY + 20.5;
+
+  // Labels Row 1
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PACKET DOCKET NO.', col1, row1Y);
+  doc.text('COURSE CODE', col2, row1Y);
+  doc.text('PROGRAMME', col3, row1Y);
+  doc.text('TOTAL ENCLOSED SCRIPTS', col4, row1Y);
+
+  // Values Row 1
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.text(packet.packetNumber || '-', col1, row2Y);
+  const displayCourse = courseTitle ? `${packet.courseCode} (${courseTitle.slice(0, 16)})` : packet.courseCode;
+  doc.text(displayCourse, col2, row2Y);
+  doc.text(packet.programmeCode || '-', col3, row2Y);
+  doc.setTextColor(6, 95, 70); // emerald-800
+  doc.text(`${packet.scriptCount} Physical Scripts`, col4, row2Y);
+
+  // Labels Row 2
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DISPATCH DATE', col1, row3Y);
+  doc.text('EXPECTED RETURN DATE', col2, row3Y);
+  doc.text('PACKET STATUS', col3, row3Y);
+  doc.text('DISPATCH MODE / NOTES', col4, row3Y);
+
+  // Values Row 2
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+  doc.setFont('helvetica', 'normal');
+  const dispatchDate = packet.assignedDate ? formatDate(packet.assignedDate) : formatDate(new Date().toISOString());
+  const returnDate = packet.expectedReturnDate ? formatDate(packet.expectedReturnDate) : 'Within 15 Days';
+  doc.text(dispatchDate, col1, row4Y);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(190, 18, 60); // rose-700
+  doc.text(returnDate, col2, row4Y);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(30, 41, 59);
+  doc.text(packet.status, col3, row4Y);
+  doc.text((packet.notes || 'Cloth / Sealed Envelope').slice(0, 24), col4, row4Y);
+
+  currentY += metaBoxHeight + 3.5;
+
+  // 4. EVALUATOR PROFILE BOX
+  const evalBoxHeight = 15;
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, currentY, usableWidth, evalBoxHeight, 1.5, 1.5, 'FD');
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('ALLOTTED ACADEMIC COUNSELLOR / EVALUATOR DETAILS', col1, currentY + 3.5);
+  if (evaluator) {
+    doc.setTextColor(67, 56, 202); // indigo-700
+    doc.text(`Code: ${evaluator.evaluatorCode}`, margin + usableWidth - 3, currentY + 3.5, { align: 'right' });
+  }
+
+  if (evaluator) {
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Name: ${evaluator.name}`, col1, currentY + 8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Designation: ${evaluator.designation || 'Academic Counsellor'}, ${evaluator.collegeInstitution || "S.D. Jain Girls' College"}`, col1, currentY + 12);
+    doc.text(`Phone: ${evaluator.contactPhone || '-'}  •  Email: ${evaluator.email || '-'}`, col3, currentY + 8);
+  } else {
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 116, 139);
+    doc.text('No evaluator currently assigned. Packet formed for internal examination records and subsequent allotment.', col1, currentY + 9);
+  }
+
+  currentY += evalBoxHeight + 4;
+
+  // 5. ITEMIZED SCRIPTS TABLE (with Marks Box & Evaluator Remarks)
+  const tableData = scripts.length > 0
+    ? scripts.map((s, idx) => [
+        String(idx + 1),
+        s.enrollmentNo || '-',
+        s.studentName || '-',
+        s.tokenNo || '-',
+        s.submissionDate ? formatDate(s.submissionDate) : '-',
+        s.marks !== null && s.marks !== undefined ? String(s.marks) : '',
+        '',
+      ])
+    : [[
+        '1',
+        '-',
+        `Standard Packet Allocation (${packet.scriptCount} Scripts)`,
+        '-',
+        dispatchDate,
+        '',
+        '',
+      ]];
+
+  autoTable(doc, {
+    startY: currentY,
+    margin: { left: margin, right: margin },
+    head: [['#', 'Enrollment No.', 'Candidate Name', 'Intake Token / Receipt', 'Receipt Date', 'Marks (100)', 'Evaluator Remarks']],
+    body: tableData,
+    theme: 'grid',
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 1.8,
+      textColor: [30, 41, 59],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.2,
+    },
+    headStyles: {
+      fillColor: [15, 23, 42], // slate-900
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7,
+    },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 28, fontStyle: 'bold', halign: 'left' },
+      2: { cellWidth: 50, halign: 'left' },
+      3: { cellWidth: 32, halign: 'left' },
+      4: { cellWidth: 24, halign: 'center' },
+      5: { cellWidth: 22, halign: 'center', fillColor: [254, 252, 232] }, // amber-50
+      6: { cellWidth: 22, halign: 'left' },
+    },
+  });
+
+  let finalY = (doc as any).lastAutoTable.finalY + 5;
+
+  // Check if remaining space on current page is enough for Guidelines + Signatures (~42mm)
+  if (finalY + 45 > pageHeight - margin) {
+    doc.addPage();
+    finalY = margin + 5;
+  }
+
+  // 6. GUIDELINES BOX
+  const guidelinesBoxHeight = 17;
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(margin, finalY, usableWidth, guidelinesBoxHeight, 1, 1, 'FD');
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('STATUTORY GUIDELINES FOR ACADEMIC COUNSELLOR / EVALUATOR:', margin + 3, finalY + 3.8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`1. Verify enclosed physical scripts match docket count (${packet.scriptCount} scripts). Report any discrepancy immediately.`, margin + 3, finalY + 7.2);
+  doc.text('2. Evaluate strictly in accordance with IGNOU scheme & marking keys using red ink.', margin + 3, finalY + 10.5);
+  doc.text(`3. Record marks on script cover & SED award list. Return to Study Centre on or before ${returnDate}.`, margin + 3, finalY + 13.8);
+
+  finalY += guidelinesBoxHeight + 8;
+
+  // Check if remaining space is enough for Signatures (~24mm)
+  if (finalY + 25 > pageHeight - margin) {
+    doc.addPage();
+    finalY = margin + 12;
+  }
+
+  // 7. TRI-SIGNATURE STATUTORY BLOCKS
+  const sigColWidth = usableWidth / 3;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+
+  // Signature 1: Study Centre Official
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.3);
+  doc.line(margin + 4, finalY + 10, margin + sigColWidth - 10, finalY + 10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Study Centre Official', margin + 4, finalY + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Packet Handover & Dispatch', margin + 4, finalY + 17.5);
+  doc.text(`Date: ${dispatchDate}`, margin + 4, finalY + 21);
+
+  // Signature 2: Evaluator / Counsellor
+  const sig2X = margin + sigColWidth + 4;
+  doc.line(sig2X, finalY + 10, sig2X + sigColWidth - 14, finalY + 10);
+  doc.setFont('helvetica', 'bold');
+  doc.text(evaluator ? evaluator.name : 'Academic Counsellor', sig2X, finalY + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Signature & Receipt Acknowledged', sig2X, finalY + 17.5);
+  doc.text(`Contact: ${evaluator?.contactPhone || '—'}`, sig2X, finalY + 21);
+
+  // Signature 3: Centre Coordinator
+  const sig3X = margin + sigColWidth * 2 + 4;
+  doc.line(sig3X, finalY + 10, sig3X + sigColWidth - 8, finalY + 10);
+  doc.setFont('helvetica', 'bold');
+  doc.text(coordinatorName, sig3X, finalY + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Coordinator, ${studyCentreCode}`, sig3X, finalY + 17.5);
+  doc.text("Official Seal & Date", sig3X, finalY + 21);
+
+  // 8. ADD PAGE NUMBERS & AUDIT FOOTER TO ALL PAGES
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `IGNOU Study Centre ${studyCentreCode} • Packet Ref: ${packet.packetNumber} • Course: ${packet.courseCode} (${packet.programmeCode})`,
+      margin,
+      pageHeight - 6
+    );
+    doc.text(
+      `Page ${i} of ${totalPages}`,
+      pageWidth - margin - 15,
+      pageHeight - 6
+    );
+  }
+
+  return doc;
+}
+
+/**
+ * Downloads the official IGNOU Packet Dispatch Memo & Docket Slip PDF directly to the user's browser.
+ */
+export function downloadPacketDispatchSlipPDF(
+  packet: CoursePacket,
+  evaluator: Evaluator | null,
+  scripts: ScriptEntry[],
+  options: PacketSlipPDFOptions = {}
+): void {
+  const doc = generatePacketDispatchSlipPDF(packet, evaluator, scripts, options);
+  const cleanPacketNo = (packet.packetNumber || 'PACKET').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `IGNOU_SC2033_Dispatch_Slip_${cleanPacketNo}.pdf`;
+  doc.save(filename);
+}
+

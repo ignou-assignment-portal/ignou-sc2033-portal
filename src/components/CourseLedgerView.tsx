@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Printer,
+  Download,
   Users,
   Pencil,
   Trash2,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 import { PacketDispatchSlipModal, ScriptEntry } from './PacketDispatchSlipModal';
 import { normalizeSessionName } from '../services/sheetsService';
+import { downloadPacketDispatchSlipPDF } from '../services/pdfReportGenerator';
 
 export const CourseLedgerView: React.FC = () => {
   const {
@@ -41,6 +43,7 @@ export const CourseLedgerView: React.FC = () => {
     isAdmin,
     reconcileIntakeAndCourseLedger,
     getCourseTitle,
+    settings,
   } = useApp();
 
   const [ledgerScope, setLedgerScope] = useState<'ALL' | 'SESSION'>('ALL');
@@ -730,20 +733,43 @@ export const CourseLedgerView: React.FC = () => {
 
                   {/* Packet actions: Print Slip, Edit, Delete & Status Toggles */}
                   <div className="pt-3 border-t border-zinc-200 space-y-2">
-                    <div className="flex items-center justify-between gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPacketForSlip(pkt);
-                          setSlipScripts(getCourseScripts(pkt.courseCode, pkt));
-                          setIsDispatchSlipOpen(true);
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                        title="Print Official Packet Dispatch Slip"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span>Print Slip</span>
-                      </button>
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPacketForSlip(pkt);
+                            setSlipScripts(getCourseScripts(pkt.courseCode, pkt));
+                            setIsDispatchSlipOpen(true);
+                          }}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
+                          title="Print Official Packet Dispatch Slip"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                          <span>Print Slip</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const ev = getEvaluatorInfo(pkt.evaluatorId);
+                            const scripts = getCourseScripts(pkt.courseCode, pkt);
+                            downloadPacketDispatchSlipPDF(pkt, ev || null, scripts, {
+                              studyCentreName: settings.institutionName,
+                              studyCentreCode: settings.centreCode || 'SC-2033',
+                              regionalCentre: settings.regionalCentreCode,
+                              coordinatorName: settings.coordinatorName,
+                              courseTitle: getCourseTitle(pkt.courseCode, pkt.programmeCode),
+                            });
+                            showToast(`Downloaded PDF slip for ${pkt.packetNumber}`, 'info');
+                          }}
+                          className="px-2 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1 shadow-2xs cursor-pointer"
+                          title="Download Official Packet Dispatch Slip PDF"
+                        >
+                          <Download className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>PDF</span>
+                        </button>
+                      </div>
 
                       {isAdmin && (
                         <div className="flex items-center gap-1">

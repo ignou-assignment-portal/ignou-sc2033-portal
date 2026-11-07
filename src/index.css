@@ -308,9 +308,11 @@ html.dark .border-indigo-200 {
     display: none !important;
   }
 
-  /* Hide root element completely when printing the portaled Regional Office report so page 1 begins directly with the document */
+  /* Hide root element completely when printing the portaled Regional Office report or dispatch slip so page 1 begins directly with the document */
   body.printing-intake-matrix-report #root,
-  body:has(#printable-intake-matrix-report) #root {
+  body:has(#printable-intake-matrix-report) #root,
+  body.printing-dispatch-slip #root,
+  body:has(#printable-dispatch-slip) #root {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -349,7 +351,8 @@ html.dark .border-indigo-200 {
 
   #printable-receipt,
   #printable-registration-receipt,
-  #printable-intake-matrix-report {
+  #printable-intake-matrix-report,
+  #printable-dispatch-slip {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
@@ -358,6 +361,38 @@ html.dark .border-indigo-200 {
     border: none !important;
     page-break-inside: auto !important;
     break-inside: auto !important;
+  }
+
+  #printable-dispatch-slip-portal {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  #printable-dispatch-slip {
+    display: block !important;
+    visibility: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #printable-dispatch-slip table {
+    width: 100% !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  #printable-dispatch-slip thead {
+    display: table-header-group !important;
+  }
+
+  #printable-dispatch-slip tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   #printable-intake-matrix-report table {

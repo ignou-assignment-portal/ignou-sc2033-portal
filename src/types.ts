@@ -108,6 +108,15 @@ export interface CoursePacket {
   assignedEnrollments?: string[];
 }
 
+export interface ScriptEntry {
+  sno: number;
+  enrollmentNo: string;
+  studentName: string;
+  tokenNo?: string;
+  submissionDate?: string;
+  marks?: number | null;
+}
+
 export interface RemunerationBill {
   id: string;
   session: string;

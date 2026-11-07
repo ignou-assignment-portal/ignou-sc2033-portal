@@ -1,9 +1,11 @@
-import React from 'react';
-import { CoursePacket, Evaluator } from '../types';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { CoursePacket, Evaluator, ScriptEntry } from '../types';
 import { useApp } from '../context/AppContext';
 import { formatDate } from '../utils/helpers';
 import {
   Printer,
+  Download,
   X,
   PackageCheck,
   Calendar,
@@ -15,15 +17,9 @@ import {
   Layers,
 } from 'lucide-react';
 import { InstitutionalSeal } from './InstitutionalSeal';
+import { downloadPacketDispatchSlipPDF } from '../services/pdfReportGenerator';
 
-export interface ScriptEntry {
-  sno: number;
-  enrollmentNo: string;
-  studentName: string;
-  tokenNo?: string;
-  submissionDate?: string;
-  marks?: number | null;
-}
+export type { ScriptEntry };
 
 interface PacketDispatchSlipModalProps {
   isOpen: boolean;
@@ -42,42 +38,104 @@ export const PacketDispatchSlipModal: React.FC<PacketDispatchSlipModalProps> = (
 }) => {
   const { settings, currentSession, getCourseTitle } = useApp();
 
-  if (!isOpen || !packet) return null;
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-dispatch-slip-active');
+      return () => {
+        document.body.classList.remove('modal-dispatch-slip-active');
+        document.body.classList.remove('printing-dispatch-slip');
+      };
+    }
+  }, [isOpen]);
 
-  const handlePrint = () => {
-    window.print();
-  };
+  if (!isOpen || !packet) return null;
 
   const courseTitle = getCourseTitle(packet.courseCode, packet.programmeCode);
   const dispatchDateStr = packet.assignedDate ? formatDate(packet.assignedDate) : formatDate(new Date().toISOString());
   const returnDateStr = packet.expectedReturnDate ? formatDate(packet.expectedReturnDate) : 'Within 15 Days';
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
-      {/* Print stylesheet */}
+  const handlePrint = () => {
+    document.body.classList.add('printing-dispatch-slip');
+    const cleanup = () => {
+      document.body.classList.remove('printing-dispatch-slip');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    // Safety fallback cleanup
+    setTimeout(() => {
+      document.body.classList.remove('printing-dispatch-slip');
+    }, 1500);
+  };
+
+  const handleDownloadPDF = () => {
+    if (!packet) return;
+    downloadPacketDispatchSlipPDF(packet, evaluator, scripts, {
+      studyCentreName: settings.institutionName,
+      studyCentreCode: settings.centreCode || 'SC-2033',
+      regionalCentre: settings.regionalCentreCode,
+      coordinatorName: settings.coordinatorName,
+      courseTitle: courseTitle,
+    });
+  };
+
+  return createPortal(
+    <div
+      id="printable-dispatch-slip-portal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto"
+    >
+      {/* Print stylesheet to ensure the portaled docket slip prints cleanly without blank pages */}
       <style>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 12mm 10mm;
+            margin: 8mm 8mm;
           }
-          body * {
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          #root {
+            display: none !important;
             visibility: hidden !important;
           }
-          #printable-dispatch-slip, #printable-dispatch-slip * {
-            visibility: visible !important;
-          }
-          #printable-dispatch-slip {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          #printable-dispatch-slip-portal {
+            position: static !important;
+            display: block !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: white !important;
+            background: transparent !important;
+            overflow: visible !important;
+          }
+          #printable-dispatch-slip-portal > div {
+            box-shadow: none !important;
+            border: none !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          #printable-dispatch-slip {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
             color: #0f172a !important;
             box-shadow: none !important;
             border: none !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
           }
           .no-print {
             display: none !important;
@@ -104,8 +162,18 @@ export const PacketDispatchSlipModal: React.FC<PacketDispatchSlipModalProps> = (
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleDownloadPDF}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer"
+              title="Download Official IGNOU Docket Slip as PDF"
+            >
+              <Download className="w-4 h-4" />
+              <span>Download PDF</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer"
+              title="Print Official Packet Dispatch Slip"
             >
               <Printer className="w-4 h-4" />
               <span>Print Slip</span>
@@ -113,7 +181,7 @@ export const PacketDispatchSlipModal: React.FC<PacketDispatchSlipModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
               title="Close"
             >
               <X className="w-5 h-5" />
@@ -367,6 +435,7 @@ export const PacketDispatchSlipModal: React.FC<PacketDispatchSlipModalProps> = (
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
