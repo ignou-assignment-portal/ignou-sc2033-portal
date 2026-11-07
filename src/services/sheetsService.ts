@@ -1082,24 +1082,71 @@ export async function postUpdateMarks(
  *     subId: script.subId,
  *     evaluatorId: evaluator.id,
  *     evaluatorName: evaluator.name,
- *     evaluatorCode: evaluator.evaluatorCode
- *   }
- * }
+/**
+ * Canonical assignmentId / Sub_ID normalizer across Google Sheets and client modules.
+ * Standard format: SUB_ENROLLMENT_COURSE_SESSION (uppercase, clean alphanumeric)
+ * e.g., SUB_2451540543_MPSE1_JULY2026
  */
+export function normalizeAssignmentKey(
+  subId?: string | null,
+  enrollmentNo?: string | null,
+  courseCode?: string | null,
+  session?: string | null
+): string {
+  const cleanEnr = String(enrollmentNo || '').replace(/^'/, '').trim();
+  const cleanCourse = String(courseCode || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const cleanSession = String(session || 'July 2026').replace(/\s+/g, '').toUpperCase();
+
+  if (cleanEnr && cleanCourse) {
+    return `SUB_${cleanEnr}_${cleanCourse}_${cleanSession}`;
+  }
+  if (subId) {
+    return String(subId).trim().toUpperCase();
+  }
+  return '';
+}
+
+export interface AllotEvaluatorPayload {
+  subId: string;
+  assignmentId?: string;
+  subIds?: string[];
+  enrollmentNo?: string;
+  courseCode?: string;
+  session?: string;
+  evaluatorId?: string | null;
+  evaluatorName?: string | null;
+  evaluatorCode?: string | null;
+  Allotted_Evaluator?: string | null;
+  evaluator?: string | null;
+}
+
 export async function postAllotEvaluator(
   subId: string,
-  evaluator: { id?: string; name?: string; evaluatorCode?: string; Allotted_Evaluator?: string | null; enrollmentNo?: string; courseCode?: string }
+  evaluator: {
+    id?: string;
+    name?: string;
+    evaluatorCode?: string;
+    Allotted_Evaluator?: string | null;
+    enrollmentNo?: string;
+    courseCode?: string;
+    session?: string;
+  }
 ): Promise<ApiResponse> {
-  const allottedEvaluatorVal = evaluator.Allotted_Evaluator || (evaluator.name && evaluator.evaluatorCode ? `${evaluator.name} (${evaluator.evaluatorCode})` : evaluator.name || '');
+  const allottedEvaluatorVal =
+    evaluator.Allotted_Evaluator ||
+    (evaluator.name && evaluator.evaluatorCode ? `${evaluator.name} (${evaluator.evaluatorCode})` : evaluator.name || '');
   const cleanSubId = (subId || '').toString().trim();
   const cleanEnr = (evaluator.enrollmentNo || '').toString().replace(/^'/, '').trim();
   const cleanCourse = (evaluator.courseCode || '').toString().trim().toUpperCase();
+  const canonicalKey = normalizeAssignmentKey(cleanSubId, cleanEnr, cleanCourse, evaluator.session);
 
   const payload = {
     subId: cleanSubId,
-    subIds: [cleanSubId],
+    assignmentId: canonicalKey || cleanSubId,
+    subIds: [cleanSubId, canonicalKey].filter(Boolean),
     enrollmentNo: cleanEnr,
     courseCode: cleanCourse,
+    session: evaluator.session || '',
     evaluator: allottedEvaluatorVal,
     evaluatorId: evaluator.id || '',
     evaluatorName: evaluator.name || allottedEvaluatorVal,
@@ -1108,6 +1155,14 @@ export async function postAllotEvaluator(
   };
 
   try {
+    console.log(`[EvaluatorSync:API] Dispatching ALLOT_EVALUATOR to Sheets:`, {
+      subId: cleanSubId,
+      canonicalKey,
+      enrollmentNo: cleanEnr,
+      courseCode: cleanCourse,
+      evaluator: allottedEvaluatorVal,
+    });
+
     await fetch(SCRIPT_URL, {
       method: "POST",
       mode: "no-cors",
@@ -1126,6 +1181,71 @@ export async function postAllotEvaluator(
     status: 'success',
     action: 'ALLOT_EVALUATOR',
     message: 'Saved & Synced with Google Sheet',
+  };
+}
+
+export async function postBatchAllotEvaluator(
+  allotments: Array<{
+    subId: string;
+    assignmentId?: string;
+    enrollmentNo?: string;
+    courseCode?: string;
+    session?: string;
+    evaluatorId?: string | null;
+    evaluatorName?: string | null;
+    evaluatorCode?: string | null;
+    Allotted_Evaluator?: string | null;
+  }>
+): Promise<ApiResponse> {
+  const preparedAssignments = allotments.map((a) => {
+    const evalName =
+      a.Allotted_Evaluator ||
+      (a.evaluatorName && a.evaluatorCode ? `${a.evaluatorName} (${a.evaluatorCode})` : a.evaluatorName || '');
+    const cleanSubId = (a.subId || '').toString().trim();
+    const cleanEnr = (a.enrollmentNo || '').toString().replace(/^'/, '').trim();
+    const cleanCourse = (a.courseCode || '').toString().trim().toUpperCase();
+    const canonicalKey = normalizeAssignmentKey(cleanSubId, cleanEnr, cleanCourse, a.session);
+
+    return {
+      subId: cleanSubId,
+      assignmentId: canonicalKey || cleanSubId,
+      enrollmentNo: cleanEnr,
+      courseCode: cleanCourse,
+      session: a.session || '',
+      evaluator: evalName,
+      evaluatorId: a.evaluatorId || '',
+      evaluatorName: a.evaluatorName || evalName,
+      evaluatorCode: a.evaluatorCode || '',
+      Allotted_Evaluator: evalName,
+    };
+  });
+
+  const payload = {
+    assignments: preparedAssignments,
+    subIds: preparedAssignments.map((p) => p.subId),
+    count: preparedAssignments.length,
+  };
+
+  try {
+    console.log(`[EvaluatorSync:API] Dispatching BATCH_ALLOT_EVALUATOR (${preparedAssignments.length} scripts) to Sheets`);
+    await fetch(SCRIPT_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "BATCH_ALLOT_EVALUATOR",
+        payload: payload,
+      }),
+    });
+  } catch (err) {
+    console.warn("[postBatchAllotEvaluator fallback]:", err);
+    sendScriptPost({ action: "BATCH_ALLOT_EVALUATOR", payload }).catch(() => {});
+  }
+
+  return {
+    status: 'success',
+    action: 'BATCH_ALLOT_EVALUATOR',
+    message: `Batch synced ${preparedAssignments.length} evaluator allotments to Google Sheets`,
   };
 }
 
@@ -1949,35 +2069,90 @@ function doPost(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 4. Update Marks
-  if (action === "UPDATE_MARKS" || action === "ALLOT_EVALUATOR") {
-    var ledgerSheet = findSheetByAliases(ss, ["Course_Ledger", "courseLedger"]);
+  // 4. Update Marks / Allot Evaluator / Batch Allot Evaluator
+  if (action === "UPDATE_MARKS" || action === "ALLOT_EVALUATOR" || action === "BATCH_ALLOT_EVALUATOR") {
+    var ledgerSheet = findSheetByAliases(ss, ["Course_Ledger", "courseLedger", "2_Course_Evaluation_Master"]);
+    var updatedCount = 0;
     if (ledgerSheet) {
       var data = ledgerSheet.getDataRange().getValues();
-      var targetSubId = String(payload.subId || "").trim();
-      var targetEnr = String(payload.enrollmentNo || "").replace(/^'/, '').trim();
-      var targetCourse = String(payload.courseCode || "").trim().toUpperCase();
+      if (data.length > 1) {
+        var headers = data[0];
+        var colMap = {};
+        for (var c = 0; c < headers.length; c++) {
+          var hClean = String(headers[c] || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+          colMap[hClean] = c + 1; // 1-indexed for getRange
+        }
 
-      for (var i = 1; i < data.length; i++) {
-        var rowSubId = String(data[i][0] || "").trim();
-        var rowEnr = String(data[i][2] || "").replace(/^'/, '').trim();
-        var rowCourse = String(data[i][7] || "").trim().toUpperCase();
+        var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
+        var enrCol = colMap["enrollmentno"] || colMap["enrollment"] || colMap["enr"] || 3;
+        var courseCol = colMap["coursecode"] || colMap["course"] || 8;
+        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["counsellor"] || colMap["evaluatorname"] || 9;
+        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 0;
+        var marksCol = colMap["marks"] || 10;
+        var gradeCol = colMap["grade"] || 11;
+        var statusCol = colMap["status"] || 12;
 
-        if ((targetSubId && rowSubId === targetSubId) || (targetEnr && targetCourse && rowEnr === targetEnr && rowCourse === targetCourse)) {
-          if (action === "ALLOT_EVALUATOR" && payload.evaluator) {
-            ledgerSheet.getRange(i + 1, 9).setValue(payload.evaluator);
-            ledgerSheet.getRange(i + 1, 12).setValue("Allotted");
-          } else if (action === "UPDATE_MARKS") {
-            ledgerSheet.getRange(i + 1, 10).setValue(payload.marks !== undefined ? payload.marks : "");
-            ledgerSheet.getRange(i + 1, 11).setValue(payload.grade || "");
-            ledgerSheet.getRange(i + 1, 12).setValue("Marks Locked");
+        var itemsToProcess = [];
+        if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
+          itemsToProcess = payload.assignments;
+        } else if (Array.isArray(payload.subIds) && payload.subIds.length > 1) {
+          for (var s = 0; s < payload.subIds.length; s++) {
+            itemsToProcess.push({
+              subId: payload.subIds[s],
+              evaluator: payload.evaluator || payload.Allotted_Evaluator || "",
+              evaluatorCode: payload.evaluatorCode || "",
+              status: "Allotted"
+            });
           }
-          break;
+        } else {
+          itemsToProcess.push(payload);
+        }
+
+        for (var p = 0; p < itemsToProcess.length; p++) {
+          var item = itemsToProcess[p];
+          var targetSubId = String(item.subId || item.assignmentId || "").trim();
+          var normTargetSubId = targetSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          var targetEnr = String(item.enrollmentNo || "").replace(/^'/, '').trim();
+          var targetCourse = String(item.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          var evalVal = item.evaluator || item.Allotted_Evaluator || item.evaluatorName || "";
+          var evalCodeVal = item.evaluatorCode || "";
+
+          for (var i = 1; i < data.length; i++) {
+            var rowSubId = String(data[i][subIdCol - 1] || "").trim();
+            var normRowSubId = rowSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+            var rowEnr = String(data[i][enrCol - 1] || "").replace(/^'/, '').trim();
+            var rowCourse = String(data[i][courseCol - 1] || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+            var isSubIdMatch = normTargetSubId && (
+              normRowSubId === normTargetSubId ||
+              normRowSubId.indexOf(normTargetSubId) !== -1 ||
+              normTargetSubId.indexOf(normRowSubId) !== -1
+            );
+            var isEnrCourseMatch = targetEnr && targetCourse && rowEnr === targetEnr && rowCourse === targetCourse;
+
+            if (isSubIdMatch || isEnrCourseMatch) {
+              if (action === "UPDATE_MARKS") {
+                if (marksCol > 0) ledgerSheet.getRange(i + 1, marksCol).setValue(item.marks !== undefined ? item.marks : "");
+                if (gradeCol > 0) ledgerSheet.getRange(i + 1, gradeCol).setValue(item.grade || "");
+                if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue("Marks Locked");
+              } else {
+                if (evalCol > 0) ledgerSheet.getRange(i + 1, evalCol).setValue(evalVal || "Allotted");
+                if (evalCodeCol > 0 && evalCodeVal) ledgerSheet.getRange(i + 1, evalCodeCol).setValue(evalCodeVal);
+                if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue(evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment");
+              }
+              updatedCount++;
+              break;
+            }
+          }
         }
       }
     }
-    return ContentService.createTextOutput(JSON.stringify({ status: "success", action: action }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      action: action,
+      updatedCount: updatedCount,
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 
   // 5. Clear Operational Data (Preserves Evaluators_Master)

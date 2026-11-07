@@ -731,36 +731,91 @@ function doPost(e) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
-  // Update Marks or Allot Evaluator
-  if (action === "UPDATE_MARKS" || action === "ALLOT_EVALUATOR") {
-    var ledger = findSheetByAliases(ss, ["Course_Ledger", "CourseLedger"]);
+  // Update Marks or Allot Evaluator / Batch Allot
+  if (action === "UPDATE_MARKS" || action === "ALLOT_EVALUATOR" || action === "BATCH_ALLOT_EVALUATOR") {
+    var ledger = findSheetByAliases(ss, ["Course_Ledger", "CourseLedger", "2_Course_Evaluation_Master"]);
+    var updatedCount = 0;
     if (ledger) {
       var data = ledger.getDataRange().getValues();
-      var targetSubId = String(payload.subId || "").trim();
-      var targetEnr = String(payload.enrollmentNo || "").replace(/^'/, '').trim();
-      var targetCourse = String(payload.courseCode || "").trim().toUpperCase();
+      if (data.length > 1) {
+        var headers = data[0];
+        var colMap = {};
+        for (var c = 0; c < headers.length; c++) {
+          var hClean = String(headers[c] || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+          colMap[hClean] = c + 1; // 1-indexed for getRange
+        }
 
-      for (var row = 1; row < data.length; row++) {
-        var rowSubId = String(data[row][0] || "").trim();
-        var rowEnr = String(data[row][2] || "").replace(/^'/, '').trim();
-        var rowCourse = String(data[row][6] || data[row][7] || "").trim().toUpperCase();
+        var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
+        var enrCol = colMap["enrollmentno"] || colMap["enrollment"] || colMap["enr"] || 3;
+        var courseCol = colMap["coursecode"] || colMap["course"] || 8;
+        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["counsellor"] || colMap["evaluatorname"] || 9;
+        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 0;
+        var marksCol = colMap["marks"] || 10;
+        var gradeCol = colMap["grade"] || 11;
+        var statusCol = colMap["status"] || 12;
 
-        if ((targetSubId && rowSubId === targetSubId) || (targetEnr && targetCourse && rowEnr === targetEnr && rowCourse === targetCourse)) {
-          if (action === "UPDATE_MARKS") {
-            ledger.getRange(row + 1, 9).setValue(payload.marks !== undefined ? payload.marks : "");
-            ledger.getRange(row + 1, 10).setValue(payload.grade || "");
-            ledger.getRange(row + 1, 11).setValue("Marks Locked");
-          } else if (action === "ALLOT_EVALUATOR") {
-            ledger.getRange(row + 1, 8).setValue(payload.evaluator || "Allotted");
-            ledger.getRange(row + 1, 11).setValue("Allotted");
+        var itemsToProcess = [];
+        if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
+          itemsToProcess = payload.assignments;
+        } else if (Array.isArray(payload.subIds) && payload.subIds.length > 1) {
+          for (var s = 0; s < payload.subIds.length; s++) {
+            itemsToProcess.push({
+              subId: payload.subIds[s],
+              evaluator: payload.evaluator || payload.Allotted_Evaluator || "",
+              evaluatorCode: payload.evaluatorCode || "",
+              status: "Allotted"
+            });
           }
-          break;
+        } else {
+          itemsToProcess.push(payload);
+        }
+
+        for (var p = 0; p < itemsToProcess.length; p++) {
+          var item = itemsToProcess[p];
+          var targetSubId = String(item.subId || item.assignmentId || "").trim();
+          var normTargetSubId = targetSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          var targetEnr = String(item.enrollmentNo || "").replace(/^'/, '').trim();
+          var targetCourse = String(item.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          var evalVal = item.evaluator || item.Allotted_Evaluator || item.evaluatorName || "";
+          var evalCodeVal = item.evaluatorCode || "";
+
+          for (var row = 1; row < data.length; row++) {
+            var rowSubId = String(data[row][subIdCol - 1] || "").trim();
+            var normRowSubId = rowSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+            var rowEnr = String(data[row][enrCol - 1] || "").replace(/^'/, '').trim();
+            var rowCourse = String(data[row][courseCol - 1] || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+            var isSubIdMatch = normTargetSubId && (
+              normRowSubId === normTargetSubId ||
+              normRowSubId.indexOf(normTargetSubId) !== -1 ||
+              normTargetSubId.indexOf(normRowSubId) !== -1
+            );
+            var isEnrCourseMatch = targetEnr && targetCourse && rowEnr === targetEnr && rowCourse === targetCourse;
+
+            if (isSubIdMatch || isEnrCourseMatch) {
+              if (action === "UPDATE_MARKS") {
+                if (marksCol > 0) ledger.getRange(row + 1, marksCol).setValue(item.marks !== undefined ? item.marks : "");
+                if (gradeCol > 0) ledger.getRange(row + 1, gradeCol).setValue(item.grade || "");
+                if (statusCol > 0) ledger.getRange(row + 1, statusCol).setValue("Marks Locked");
+              } else {
+                if (evalCol > 0) ledger.getRange(row + 1, evalCol).setValue(evalVal || "Allotted");
+                if (evalCodeCol > 0 && evalCodeVal) ledger.getRange(row + 1, evalCodeCol).setValue(evalCodeVal);
+                if (statusCol > 0) ledger.getRange(row + 1, statusCol).setValue(evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment");
+              }
+              updatedCount++;
+              break;
+            }
+          }
         }
       }
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ status: "success", action: action }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      action: action,
+      updatedCount: updatedCount,
+      timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 
   // Add / Sync Student Admission (Fresh vs Re-Registration)

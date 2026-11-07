@@ -30,6 +30,7 @@ import {
   SheetUserAccount,
   DiscrepancyReport,
   FullDatabaseBackup,
+  EvaluatorSyncLogEntry,
 } from '../types';
 import { THEMES, THEME_STORAGE_KEY, getInitialTheme, applyThemeToDOM } from '../utils/theme';
 import {
@@ -80,7 +81,9 @@ import {
   executeQueuedMutation,
   SCRIPT_URL,
   normalizeSessionName,
-  norm
+  norm,
+  normalizeAssignmentKey,
+  postBatchAllotEvaluator
 } from '../services/sheetsService';
 import {
   subscribeSyncQueue,
@@ -269,6 +272,9 @@ interface AppContextType {
   retrySingleQueueItem: (id: string) => Promise<boolean>;
   removeQueueItem: (id: string) => Promise<void>;
   clearAllQueueItems: () => Promise<void>;
+  evaluatorSyncLogs: EvaluatorSyncLogEntry[];
+  resyncAllEvaluatorsToSheets: () => Promise<{ total: number; synced: number }>;
+  clearEvaluatorSyncLogs: () => void;
 
   // Remuneration & Bills
   sessionBills: RemunerationBill[];
@@ -1324,6 +1330,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [syncStatus, setSyncStatus] = useState<string>('Sheets Connected');
   const [selectedReceiptRecord, setSelectedReceiptRecord] = useState<IntakeRecord | null>(null);
   const [selectedRegistrationReceipt, setSelectedRegistrationReceipt] = useState<RegistrationReceipt | null>(null);
+
+  // Evaluator Synchronization & Key Tracking Audit Logs
+  const [evaluatorSyncLogs, setEvaluatorSyncLogs] = useState<EvaluatorSyncLogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('ignou_evaluator_sync_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const clearEvaluatorSyncLogs = useCallback(() => {
+    setEvaluatorSyncLogs([]);
+    try {
+      localStorage.removeItem('ignou_evaluator_sync_logs');
+    } catch {}
+  }, []);
+
+  const logEvaluatorSync = useCallback((entry: Omit<EvaluatorSyncLogEntry, 'id' | 'timestamp'>) => {
+    const fullEntry: EvaluatorSyncLogEntry = {
+      ...entry,
+      id: `esync-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+    };
+
+    console.groupCollapsed(
+      `%c[EvaluatorSync] ${fullEntry.source} ➔ ${fullEntry.action}: ${fullEntry.evaluatorName || 'Unassigned'} (${fullEntry.assignmentId})`,
+      'color: #4f46e5; font-weight: bold;'
+    );
+    console.log('Timestamp:', fullEntry.timestamp);
+    console.log('Source Module:', fullEntry.source);
+    console.log('Action:', fullEntry.action);
+    console.log('Evaluator:', {
+      id: fullEntry.evaluatorId,
+      name: fullEntry.evaluatorName,
+      code: fullEntry.evaluatorCode,
+    });
+    console.log('Assignment & Candidate:', {
+      assignmentId: fullEntry.assignmentId,
+      subId: fullEntry.subId,
+      enrollmentNo: fullEntry.enrollmentNo,
+      courseCode: fullEntry.courseCode,
+      session: fullEntry.session,
+    });
+    console.log('Status:', fullEntry.status);
+    if (fullEntry.details) console.log('Details:', fullEntry.details);
+    console.groupEnd();
+
+    setEvaluatorSyncLogs((prev) => {
+      const next = [fullEntry, ...prev].slice(0, 100);
+      try {
+        localStorage.setItem('ignou_evaluator_sync_logs', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   // Global Toast Notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -5202,33 +5264,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // Dispatch ALLOT_EVALUATOR to Google Sheets
-      if (ev) {
-        evaluationIds.forEach((subId) => {
-          postAllotEvaluator(subId, {
-            id: ev.id,
-            name: ev.evaluatorName || ev.name,
-            evaluatorCode: ev.evaluatorCode,
-            Allotted_Evaluator: evalDisplayName,
+      // Dispatch ALLOT_EVALUATOR to Google Sheets with full canonical key and metadata
+      if (affectedRecords.length > 0) {
+        affectedRecords.forEach((rec) => {
+          const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+          const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+          const recSess = rec.session || rec.Session || currentSession;
+          const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
+
+          postAllotEvaluator(rec.id, {
+            id: ev ? ev.id : '',
+            name: ev ? (ev.evaluatorName || ev.name) : 'Unallotted',
+            evaluatorCode: ev ? ev.evaluatorCode : '',
+            Allotted_Evaluator: evalDisplayName || 'Unallotted',
+            enrollmentNo: cleanEnr,
+            courseCode: cleanCourse,
+            session: recSess,
           }).catch((err) => console.warn(err));
+
+          logEvaluatorSync({
+            source: 'Evaluation Master',
+            action: ev ? 'ALLOT' : 'UNALLOT',
+            evaluatorId: ev ? ev.id : null,
+            evaluatorName: evalDisplayName || 'Unallotted',
+            evaluatorCode: ev?.evaluatorCode,
+            assignmentId: canonicalKey || rec.id,
+            subId: rec.id,
+            enrollmentNo: cleanEnr,
+            courseCode: cleanCourse,
+            session: recSess,
+            status: 'DISPATCHED',
+            details: `Allotment updated via Evaluation Master to ${evalDisplayName || 'Unallotted'}`,
+          });
         });
 
-        logAuditEvent({
-          action: 'EVALUATOR_ALLOTTED',
-          category: 'MARKS_EVALUATION',
-          actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
-          role: currentRole,
-          session: currentSession,
-          targetIdentifier: `${ev.evaluatorCode} (${ev.evaluatorName || ev.name})`,
-          summary: `Allotted Academic Counsellor ${ev.evaluatorName || ev.name} (${ev.evaluatorCode}) to ${evaluationIds.length} script${evaluationIds.length === 1 ? '' : 's'}`,
-          status: 'SUCCESS',
-          details: { evaluatorCode: ev.evaluatorCode, count: evaluationIds.length, ids: evaluationIds },
-        });
+        if (ev) {
+          logAuditEvent({
+            action: 'EVALUATOR_ALLOTTED',
+            category: 'MARKS_EVALUATION',
+            actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+            role: currentRole,
+            session: currentSession,
+            targetIdentifier: `${ev.evaluatorCode} (${ev.evaluatorName || ev.name})`,
+            summary: `Allotted Academic Counsellor ${ev.evaluatorName || ev.name} (${ev.evaluatorCode}) to ${affectedRecords.length} script${affectedRecords.length === 1 ? '' : 's'}`,
+            status: 'SUCCESS',
+            details: { evaluatorCode: ev.evaluatorCode, count: affectedRecords.length, ids: affectedRecords.map((r) => r.id) },
+          });
+        }
       }
 
       showToast('Saved & Synced with Google Sheet', 'success');
     },
-    [evaluators, currentRole, showToast, logAuditEvent, settings.coordinatorName, currentSession, postAllotEvaluator]
+    [evaluators, currentRole, showToast, logAuditEvent, settings.coordinatorName, currentSession, postAllotEvaluator, logEvaluatorSync]
   );
 
   const updateEvaluationMarks = useCallback(
@@ -5476,7 +5563,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         : null;
       const evalDisplayName = ev ? `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` : null;
       const allottedBy = currentRole === 'ADMIN' ? 'Coordinator Desk' : 'Counter Desk Official';
-      const affectedSubIds: string[] = [];
+      const affectedRecords: CourseEvaluationRecord[] = [];
 
       setCourseEvaluations((prev) => {
         let changed = false;
@@ -5493,7 +5580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (rec.isLocked && currentRole !== 'ADMIN') return rec;
 
           changed = true;
-          affectedSubIds.push(rec.id);
+          affectedRecords.push(rec);
 
           return {
             ...rec,
@@ -5523,21 +5610,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return prev;
       });
 
-      // Synchronize with Google Sheets backend
-      if (ev && affectedSubIds.length > 0) {
-        affectedSubIds.forEach((subId) => {
-          postAllotEvaluator(subId, {
-            id: ev.id,
-            name: ev.evaluatorName || ev.name,
-            evaluatorCode: ev.evaluatorCode,
-            Allotted_Evaluator: evalDisplayName,
+      // Synchronize with Google Sheets backend with canonical key & log audit trail
+      if (affectedRecords.length > 0) {
+        affectedRecords.forEach((rec) => {
+          const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+          const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+          const recSess = rec.session || rec.Session || currentSession;
+          const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
+
+          postAllotEvaluator(rec.id, {
+            id: ev ? ev.id : '',
+            name: ev ? (ev.evaluatorName || ev.name) : 'Unallotted',
+            evaluatorCode: ev ? ev.evaluatorCode : '',
+            Allotted_Evaluator: evalDisplayName || 'Unallotted',
+            enrollmentNo: cleanEnr,
+            courseCode: cleanCourse,
+            session: recSess,
           }).catch((err) => console.warn(err));
+
+          logEvaluatorSync({
+            source: 'Packet Dispatch',
+            action: ev ? 'ALLOT' : 'UNALLOT',
+            evaluatorId: ev ? ev.id : null,
+            evaluatorName: evalDisplayName || 'Unallotted',
+            evaluatorCode: ev?.evaluatorCode,
+            assignmentId: canonicalKey || rec.id,
+            subId: rec.id,
+            enrollmentNo: cleanEnr,
+            courseCode: cleanCourse,
+            session: recSess,
+            status: 'DISPATCHED',
+            details: `Packet created (${newPacket.packetNumber}): Allotted to ${evalDisplayName || 'Unallotted'}`,
+          });
         });
       }
 
       return newPacket;
     },
-    [currentSession, packets, evaluators, currentRole, postAllotEvaluator]
+    [currentSession, packets, evaluators, currentRole, postAllotEvaluator, logEvaluatorSync]
   );
 
   const updatePacket = useCallback(
@@ -5587,7 +5697,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const evalDisplayName = ev ? `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` : null;
         const normCourse = currentPkt.courseCode.trim().toUpperCase();
         const normSess = normalizeSessionName(currentPkt.session || currentSession);
-        const affectedSubIds: string[] = [];
+        const affectedAllottedRecords: CourseEvaluationRecord[] = [];
+        const affectedUnallottedRecords: CourseEvaluationRecord[] = [];
 
         setCourseEvaluations((prev) => {
           let changed = false;
@@ -5603,7 +5714,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Script is currently in packet
             if (assignedSet.has(recEnr)) {
               changed = true;
-              if (ev) affectedSubIds.push(rec.id);
+              affectedAllottedRecords.push(rec);
               return {
                 ...rec,
                 evaluatorId: ev ? ev.id : null,
@@ -5626,6 +5737,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Script was removed from packet
             if (prevAssignedSet.has(recEnr) && !assignedSet.has(recEnr)) {
               changed = true;
+              affectedUnallottedRecords.push(rec);
               return {
                 ...rec,
                 evaluatorId: null,
@@ -5655,19 +5767,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return prev;
         });
 
-        if (ev && affectedSubIds.length > 0) {
-          affectedSubIds.forEach((subId) => {
-            postAllotEvaluator(subId, {
-              id: ev.id,
-              name: ev.evaluatorName || ev.name,
-              evaluatorCode: ev.evaluatorCode,
-              Allotted_Evaluator: evalDisplayName,
+        // Sync newly allotted scripts with Google Sheets
+        if (affectedAllottedRecords.length > 0) {
+          affectedAllottedRecords.forEach((rec) => {
+            const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+            const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const recSess = rec.session || rec.Session || currentSession;
+            const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
+
+            postAllotEvaluator(rec.id, {
+              id: ev ? ev.id : '',
+              name: ev ? (ev.evaluatorName || ev.name) : 'Unallotted',
+              evaluatorCode: ev ? ev.evaluatorCode : '',
+              Allotted_Evaluator: evalDisplayName || 'Unallotted',
+              enrollmentNo: cleanEnr,
+              courseCode: cleanCourse,
+              session: recSess,
             }).catch((err) => console.warn(err));
+
+            logEvaluatorSync({
+              source: 'Packet Dispatch',
+              action: ev ? 'ALLOT' : 'UNALLOT',
+              evaluatorId: ev ? ev.id : null,
+              evaluatorName: evalDisplayName || 'Unallotted',
+              evaluatorCode: ev?.evaluatorCode,
+              assignmentId: canonicalKey || rec.id,
+              subId: rec.id,
+              enrollmentNo: cleanEnr,
+              courseCode: cleanCourse,
+              session: recSess,
+              status: 'DISPATCHED',
+              details: `Packet updated (${currentPkt.packetNumber}): Allotted to ${evalDisplayName || 'Unallotted'}`,
+            });
+          });
+        }
+
+        // Sync unallotted scripts with Google Sheets
+        if (affectedUnallottedRecords.length > 0) {
+          affectedUnallottedRecords.forEach((rec) => {
+            const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+            const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const recSess = rec.session || rec.Session || currentSession;
+            const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
+
+            postAllotEvaluator(rec.id, {
+              id: '',
+              name: 'Unallotted',
+              evaluatorCode: '',
+              Allotted_Evaluator: 'Unallotted',
+              enrollmentNo: cleanEnr,
+              courseCode: cleanCourse,
+              session: recSess,
+            }).catch((err) => console.warn(err));
+
+            logEvaluatorSync({
+              source: 'Packet Dispatch',
+              action: 'UNALLOT',
+              evaluatorId: null,
+              evaluatorName: 'Unallotted',
+              evaluatorCode: undefined,
+              assignmentId: canonicalKey || rec.id,
+              subId: rec.id,
+              enrollmentNo: cleanEnr,
+              courseCode: cleanCourse,
+              session: recSess,
+              status: 'DISPATCHED',
+              details: `Script removed from packet (${currentPkt.packetNumber}): Unallotted`,
+            });
           });
         }
       }
     },
-    [packets, evaluators, currentSession, currentRole, postAllotEvaluator]
+    [packets, evaluators, currentSession, currentRole, postAllotEvaluator, logEvaluatorSync]
   );
 
   const deletePacket = useCallback(
@@ -7945,6 +8116,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [currentRole, currentSession, settings.coordinatorName, showToast, logAuditEvent]);
 
+  const resyncAllEvaluatorsToSheets = useCallback(async (): Promise<{ total: number; synced: number }> => {
+    // Collect all course evaluations that have an evaluator assigned
+    const allottedRecords = courseEvaluations.filter(
+      (rec) =>
+        (rec.evaluatorId && rec.evaluatorId.trim() !== '') ||
+        (rec.Allotted_Evaluator && rec.Allotted_Evaluator !== 'Unallotted' && rec.Allotted_Evaluator.trim() !== '')
+    );
+
+    if (allottedRecords.length === 0) {
+      showToast('No allotted evaluators found to sync.', 'info');
+      return { total: 0, synced: 0 };
+    }
+
+    const payloadItems = allottedRecords.map((rec) => {
+      const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+      const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+      const recSess = rec.session || rec.Session || currentSession;
+      const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
+
+      const ev = evaluators.find((e) => e.id === rec.evaluatorId || e.evaluatorCode === rec.evaluatorCode);
+      const evalName = ev ? (ev.evaluatorName || ev.name) : rec.evaluatorName || '';
+      const evalCode = ev ? ev.evaluatorCode : rec.evaluatorCode || '';
+      const evalDisplayName = rec.Allotted_Evaluator || (ev ? `${evalName} (${evalCode})` : '');
+
+      return {
+        subId: rec.id,
+        assignmentId: canonicalKey || rec.id,
+        enrollmentNo: cleanEnr,
+        courseCode: cleanCourse,
+        session: recSess,
+        evaluatorId: rec.evaluatorId || ev?.id || '',
+        name: evalName,
+        evaluatorCode: evalCode,
+        Allotted_Evaluator: evalDisplayName,
+      };
+    });
+
+    logEvaluatorSync({
+      source: 'Manual Re-Sync',
+      action: 'BATCH_RESYNC',
+      evaluatorId: null,
+      evaluatorName: 'Batch Sync',
+      assignmentId: `BATCH_${payloadItems.length}_RECORDS`,
+      status: 'DISPATCHED',
+      details: `Starting full re-sync of ${payloadItems.length} evaluator allotments to Google Sheets Course_Ledger.`,
+    });
+
+    try {
+      const result = await postBatchAllotEvaluator(payloadItems);
+      logEvaluatorSync({
+        source: 'Manual Re-Sync',
+        action: 'BATCH_RESYNC',
+        evaluatorId: null,
+        evaluatorName: 'Batch Sync',
+        assignmentId: `BATCH_${payloadItems.length}_RECORDS`,
+        status: 'SUCCESS',
+        details: `Successfully synchronized ${payloadItems.length} allotments with Google Sheets: ${result.message || 'OK'}`,
+      });
+      showToast(`Successfully re-synced ${payloadItems.length} evaluator allotments to Google Sheets!`, 'success');
+      return { total: payloadItems.length, synced: payloadItems.length };
+    } catch (err: any) {
+      logEvaluatorSync({
+        source: 'Manual Re-Sync',
+        action: 'BATCH_RESYNC',
+        evaluatorId: null,
+        evaluatorName: 'Batch Sync',
+        assignmentId: `BATCH_${payloadItems.length}_RECORDS`,
+        status: 'ERROR',
+        details: `Batch sync error: ${err.message || String(err)}`,
+      });
+      showToast(`Batch sync error: ${err.message || String(err)}`, 'error');
+      return { total: payloadItems.length, synced: 0 };
+    }
+  }, [courseEvaluations, currentSession, evaluators, logEvaluatorSync, showToast]);
+
   const exportFullDatabaseJSON = useCallback(() => {
     const payload: FullDatabaseBackup = {
       version: '2.0.0',
@@ -8182,6 +8428,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         retrySingleQueueItem,
         removeQueueItem,
         clearAllQueueItems,
+        evaluatorSyncLogs,
+        resyncAllEvaluatorsToSheets,
+        clearEvaluatorSyncLogs,
         sessionBills,
         generateBill,
         sanctionBill,

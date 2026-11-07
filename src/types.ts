@@ -330,6 +330,23 @@ export interface CourseEvaluationRecord {
   remarks?: string;
 }
 
+export interface EvaluatorSyncLogEntry {
+  id: string;
+  timestamp: string;
+  source: 'Packet Dispatch' | 'Evaluation Master' | 'Batch Allotment' | 'Manual Re-Sync';
+  action: 'ALLOT' | 'UNALLOT' | 'BATCH_ALLOT' | 'RESYNC' | 'BATCH_RESYNC';
+  evaluatorId: string | null;
+  evaluatorName: string;
+  evaluatorCode?: string;
+  assignmentId: string;
+  subId?: string;
+  enrollmentNo?: string;
+  courseCode?: string;
+  session?: string;
+  status: 'SUCCESS' | 'DISPATCHED' | 'FAILED' | 'ERROR';
+  details?: string;
+}
+
 export interface SessionArchiveRecord {
   id: string;
   name: string;

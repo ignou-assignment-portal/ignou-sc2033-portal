@@ -18,6 +18,9 @@ import {
   ExternalLink,
   ShieldCheck,
   FileSpreadsheet,
+  UserCheck,
+  KeyRound,
+  Search,
 } from 'lucide-react';
 
 export const DataSyncMonitor: React.FC = () => {
@@ -39,10 +42,15 @@ export const DataSyncMonitor: React.FC = () => {
     isSyncDrawerOpen,
     setIsSyncDrawerOpen,
     toggleSyncDrawer,
+    evaluatorSyncLogs,
+    resyncAllEvaluatorsToSheets,
+    clearEvaluatorSyncLogs,
   } = useApp();
 
   const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [retryingItemId, setRetryingItemId] = useState<string | null>(null);
+  const [isResyncingEvaluators, setIsResyncingEvaluators] = useState(false);
+  const [syncLogFilter, setSyncLogFilter] = useState('');
 
   // Close drawer on Escape key
   useEffect(() => {
@@ -79,6 +87,30 @@ export const DataSyncMonitor: React.FC = () => {
       setRetryingItemId(null);
     }
   };
+
+  const handleResyncAllEvaluators = async () => {
+    setIsResyncingEvaluators(true);
+    try {
+      await resyncAllEvaluatorsToSheets();
+    } finally {
+      setIsResyncingEvaluators(false);
+    }
+  };
+
+  const filteredLogs = (evaluatorSyncLogs || []).filter((entry) => {
+    if (!syncLogFilter.trim()) return true;
+    const q = syncLogFilter.toLowerCase();
+    return (
+      (entry.assignmentId && entry.assignmentId.toLowerCase().includes(q)) ||
+      (entry.subId && entry.subId.toLowerCase().includes(q)) ||
+      (entry.enrollmentNo && entry.enrollmentNo.toLowerCase().includes(q)) ||
+      (entry.courseCode && entry.courseCode.toLowerCase().includes(q)) ||
+      (entry.evaluatorName && entry.evaluatorName.toLowerCase().includes(q)) ||
+      (entry.evaluatorCode && entry.evaluatorCode.toLowerCase().includes(q)) ||
+      (entry.source && entry.source.toLowerCase().includes(q)) ||
+      (entry.action && entry.action.toLowerCase().includes(q))
+    );
+  });
 
   const getStatusDot = () => {
     if (connectionStatus === 'offline') {
@@ -451,6 +483,145 @@ export const DataSyncMonitor: React.FC = () => {
                           {item.lastError && (
                             <div className="text-[11px] text-rose-600 font-mono bg-rose-50 px-2 py-1 rounded border border-rose-200">
                               Error: {item.lastError}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Evaluator & Canonical Key Sync Flow Audit */}
+              <div className="border border-zinc-200 rounded-xl overflow-hidden">
+                <div className="bg-zinc-100/70 px-4 py-3 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-indigo-700" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-800">
+                      Evaluator & Key Sync Audit ({evaluatorSyncLogs.length})
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResyncAllEvaluators}
+                      disabled={isResyncingEvaluators}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                      title="Bulk push all currently allotted evaluators from local Course Ledger to Google Sheets"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isResyncingEvaluators ? 'animate-spin' : ''}`} />
+                      <span>{isResyncingEvaluators ? 'Re-Syncing...' : 'Re-Sync All to Sheet'}</span>
+                    </button>
+
+                    {evaluatorSyncLogs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearEvaluatorSyncLogs}
+                        className="p-1 text-zinc-400 hover:text-rose-600 transition cursor-pointer"
+                        title="Clear sync audit logs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-zinc-600">
+                      Live audit tracking bidirectional evaluator allotments, canonical key resolution, and Google Sheets writebacks.
+                    </p>
+                  </div>
+
+                  {/* Filter box if entries exist */}
+                  {evaluatorSyncLogs.length > 0 && (
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={syncLogFilter}
+                        onChange={(e) => setSyncLogFilter(e.target.value)}
+                        placeholder="Filter by Student, Course, Evaluator or Key..."
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-zinc-50 border border-zinc-200 rounded-lg focus:outline-hidden focus:border-indigo-500 focus:bg-white transition"
+                      />
+                    </div>
+                  )}
+
+                  {evaluatorSyncLogs.length === 0 ? (
+                    <div className="py-6 text-center text-zinc-500 space-y-1.5">
+                      <UserCheck className="w-8 h-8 text-zinc-300 mx-auto" />
+                      <div className="text-xs font-semibold text-zinc-700">No Evaluator Sync Events Yet</div>
+                      <p className="text-[11px] text-zinc-500 max-w-sm mx-auto">
+                        Evaluator allotments from Course Packets or Evaluation Master will be tracked here in real-time with full key resolution and writeback status.
+                      </p>
+                    </div>
+                  ) : filteredLogs.length === 0 ? (
+                    <div className="py-4 text-center text-zinc-400 text-xs">
+                      No events matching &ldquo;{syncLogFilter}&rdquo;
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {filteredLogs.slice(0, 50).map((log) => (
+                        <div
+                          key={log.id}
+                          className="p-2.5 bg-zinc-50 border border-zinc-200 rounded-lg text-xs space-y-1.5 hover:border-zinc-300 transition"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${
+                                  log.action === 'ALLOT'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : log.action === 'UNALLOT'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-indigo-100 text-indigo-800'
+                                }`}
+                              >
+                                {log.action}
+                              </span>
+                              <span className="text-[11px] font-medium text-zinc-600 bg-white px-1.5 py-0.5 rounded border border-zinc-200">
+                                {log.source}
+                              </span>
+                              <span className="font-semibold text-zinc-900">
+                                {log.evaluatorName || 'Unallotted'}
+                              </span>
+                            </div>
+
+                            <span
+                              className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                                log.status === 'SUCCESS'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : log.status === 'ERROR' || log.status === 'FAILED'
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}
+                            >
+                              {log.status}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-zinc-600 font-mono grid grid-cols-1 sm:grid-cols-2 gap-1 pt-0.5">
+                            <div className="truncate flex items-center gap-1" title={log.assignmentId}>
+                              <KeyRound className="w-3 h-3 text-zinc-400 shrink-0" />
+                              <span className="text-zinc-500">Key:</span>
+                              <span className="font-semibold text-zinc-800">{log.assignmentId}</span>
+                            </div>
+                            <div className="truncate text-zinc-500">
+                              {log.enrollmentNo && log.courseCode ? (
+                                <span>
+                                  Enr: <strong className="text-zinc-800">{log.enrollmentNo}</strong> ·{' '}
+                                  <strong className="text-indigo-700">{log.courseCode}</strong>
+                                </span>
+                              ) : (
+                                <span>Time: {new Date(log.timestamp).toLocaleTimeString()}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {log.details && (
+                            <div className="text-[11px] text-zinc-500 pt-1 border-t border-zinc-200/60">
+                              {log.details}
                             </div>
                           )}
                         </div>
