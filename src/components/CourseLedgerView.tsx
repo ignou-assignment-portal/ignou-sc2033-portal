@@ -22,6 +22,11 @@ import {
   AlertTriangle,
   Lock,
   X,
+  Filter,
+  Search,
+  GraduationCap,
+  BookOpen,
+  RotateCcw,
 } from 'lucide-react';
 import { PacketDispatchSlipModal, ScriptEntry } from './PacketDispatchSlipModal';
 import { normalizeSessionName } from '../services/sheetsService';
@@ -48,8 +53,14 @@ export const CourseLedgerView: React.FC = () => {
 
   const [ledgerScope, setLedgerScope] = useState<'ALL' | 'SESSION'>('ALL');
 
+  // Filter & Selection State
+  const [filterProgramme, setFilterProgramme] = useState<string>('ALL');
+  const [filterCourseCode, setFilterCourseCode] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   // Form Packet Modal State
   const [isPacketModalOpen, setIsPacketModalOpen] = useState(false);
+  const [modalProgramme, setModalProgramme] = useState('');
   const [selectedCourseForPacket, setSelectedCourseForPacket] = useState('');
   const [selectedEvaluatorId, setSelectedEvaluatorId] = useState('');
   const [scriptCountInput, setScriptCountInput] = useState<number>(20);
@@ -279,6 +290,137 @@ export const CourseLedgerView: React.FC = () => {
     return evaluators.find((e) => e.id === evId);
   };
 
+  // Dynamic Programme list with aggregated counts
+  const availableProgrammes = useMemo(() => {
+    const map = new Map<string, { code: string; scriptCount: number; courseCount: number; unassignedCount: number }>();
+    courseLedger.forEach((c) => {
+      const prog = (c.programmeCode || 'IGNOU').trim().toUpperCase();
+      if (!map.has(prog)) {
+        map.set(prog, { code: prog, scriptCount: 0, courseCount: 0, unassignedCount: 0 });
+      }
+      const item = map.get(prog)!;
+      item.scriptCount += c.totalReceived;
+      item.courseCount += 1;
+      item.unassignedCount += c.unassignedAvailable;
+    });
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
+  }, [courseLedger]);
+
+  // Dynamic Course Code list filtered by selected programme
+  const availableCourseCodes = useMemo(() => {
+    const list = filterProgramme === 'ALL'
+      ? courseLedger
+      : courseLedger.filter((c) => (c.programmeCode || '').trim().toUpperCase() === filterProgramme.trim().toUpperCase());
+    return list.map((c) => ({
+      code: c.courseCode,
+      programme: c.programmeCode,
+      totalReceived: c.totalReceived,
+      unassignedAvailable: c.unassignedAvailable,
+      packetedScripts: c.packetedScripts,
+    })).sort((a, b) => a.code.localeCompare(b.code));
+  }, [courseLedger, filterProgramme]);
+
+  // Synchronized Filtered Course Ledger rows
+  const filteredCourseLedger = useMemo(() => {
+    return courseLedger.filter((c) => {
+      if (filterProgramme !== 'ALL' && (c.programmeCode || '').trim().toUpperCase() !== filterProgramme.trim().toUpperCase()) {
+        return false;
+      }
+      if (filterCourseCode !== 'ALL' && c.courseCode.trim().toUpperCase() !== filterCourseCode.trim().toUpperCase()) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const codeMatch = c.courseCode.toLowerCase().includes(q);
+        const progMatch = (c.programmeCode || '').toLowerCase().includes(q);
+        const titleMatch = getCourseTitle(c.courseCode, c.programmeCode).toLowerCase().includes(q);
+        if (!codeMatch && !progMatch && !titleMatch) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [courseLedger, filterProgramme, filterCourseCode, searchQuery, getCourseTitle]);
+
+  // Synchronized Filtered Session Packets
+  const filteredSessionPackets = useMemo(() => {
+    return sessionPackets.filter((pkt) => {
+      if (filterProgramme !== 'ALL' && (pkt.programmeCode || '').trim().toUpperCase() !== filterProgramme.trim().toUpperCase()) {
+        return false;
+      }
+      if (filterCourseCode !== 'ALL' && pkt.courseCode.trim().toUpperCase() !== filterCourseCode.trim().toUpperCase()) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const pktNoMatch = (pkt.packetNumber || '').toLowerCase().includes(q);
+        const codeMatch = pkt.courseCode.toLowerCase().includes(q);
+        const progMatch = (pkt.programmeCode || '').toLowerCase().includes(q);
+        const notesMatch = (pkt.notes || '').toLowerCase().includes(q);
+        const ev = evaluators.find((e) => e.id === pkt.evaluatorId);
+        const evMatch = ev ? ev.name.toLowerCase().includes(q) : false;
+        if (!pktNoMatch && !codeMatch && !progMatch && !notesMatch && !evMatch) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [sessionPackets, filterProgramme, filterCourseCode, searchQuery, evaluators]);
+
+  // Filter actions
+  const handleProgrammeChange = (prog: string) => {
+    setFilterProgramme(prog);
+    setFilterCourseCode('ALL');
+  };
+
+  const handleResetFilters = () => {
+    setFilterProgramme('ALL');
+    setFilterCourseCode('ALL');
+    setSearchQuery('');
+  };
+
+  const isFilterActive = filterProgramme !== 'ALL' || filterCourseCode !== 'ALL' || searchQuery.trim() !== '';
+
+  // Form Packet Modal: Available courses for chosen modal programme
+  const modalAvailableCourses = useMemo(() => {
+    if (!modalProgramme) return courseLedger;
+    return courseLedger.filter((c) => (c.programmeCode || '').trim().toUpperCase() === modalProgramme.trim().toUpperCase());
+  }, [courseLedger, modalProgramme]);
+
+  // Handle selecting a course inside the Form Packet Modal
+  const handleCourseSelectionInModal = (courseCode: string) => {
+    setSelectedCourseForPacket(courseCode);
+    const stats = getCoursePacketStats(courseCode);
+    const suggestedCount = stats.availableCount > 0 ? stats.availableCount : 1;
+    setScriptCountInput(suggestedCount);
+
+    // Auto-select eligible evaluator if any
+    const eligible = evaluators.find((e) => e.eligibleCourses.includes(courseCode));
+    setSelectedEvaluatorId(eligible?.id || '');
+
+    // Set modal programme if matched
+    const match = courseLedger.find((c) => c.courseCode === courseCode);
+    if (match && match.programmeCode) {
+      setModalProgramme(match.programmeCode);
+    }
+  };
+
+  // Open generic Form Packet Modal (chooses currently filtered course or first with ready scripts)
+  const handleOpenGenericPacketModal = () => {
+    if (!isAdmin) return;
+    const defaultCourse =
+      (filterCourseCode !== 'ALL' ? courseLedger.find((c) => c.courseCode === filterCourseCode) : null) ||
+      (filterProgramme !== 'ALL' ? courseLedger.find((c) => c.programmeCode === filterProgramme && c.unassignedAvailable > 0) : null) ||
+      courseLedger.find((c) => c.unassignedAvailable > 0) ||
+      courseLedger[0];
+
+    if (defaultCourse) {
+      handleOpenPacketModal(defaultCourse.courseCode, defaultCourse.unassignedAvailable);
+    } else {
+      showToast('No courses available to form a packet.', 'info');
+    }
+  };
+
   // Open Form Packet Modal with duplicate dispatch guard
   const handleOpenPacketModal = (courseCode: string, availableCount: number) => {
     if (!isAdmin) return;
@@ -289,13 +431,9 @@ export const CourseLedgerView: React.FC = () => {
       return;
     }
 
-    setSelectedCourseForPacket(courseCode);
-    const suggestedCount = stats.availableCount > 0 ? stats.availableCount : (availableCount > 0 ? availableCount : 1);
-    setScriptCountInput(suggestedCount);
-
-    // Auto-select eligible evaluator if any
-    const eligible = evaluators.find((e) => e.eligibleCourses.includes(courseCode));
-    setSelectedEvaluatorId(eligible?.id || '');
+    const courseItem = courseLedger.find((c) => c.courseCode === courseCode);
+    setModalProgramme(courseItem?.programmeCode || '');
+    handleCourseSelectionInModal(courseCode);
 
     // Default expected return date: 15 days from now
     const returnDate = new Date();
@@ -341,7 +479,12 @@ export const CourseLedgerView: React.FC = () => {
     setSlipScripts(scriptsForSlip);
     setIsDispatchSlipOpen(true);
 
-    showToast(`Evaluation Packet ${createdPkt.packetNumber} formed with ${scriptCountInput} script(s).`, 'success');
+    const evObj = evaluators.find((e) => e.id === selectedEvaluatorId);
+    if (evObj) {
+      showToast(`Packet ${createdPkt.packetNumber} formed & allotted to ${evObj.evaluatorName || evObj.name} across ${scriptCountInput} script(s) in Evaluation Master.`, 'success');
+    } else {
+      showToast(`Evaluation Packet ${createdPkt.packetNumber} formed with ${scriptCountInput} script(s).`, 'success');
+    }
 
     setIsPacketModalOpen(false);
     setSelectedCourseForPacket('');
@@ -399,7 +542,12 @@ export const CourseLedgerView: React.FC = () => {
     updatePacket(editingPacket.id, updates);
     const updatedPktObj: CoursePacket = { ...editingPacket, ...updates };
 
-    showToast(`Packet ${editingPacket.packetNumber} updated successfully.`, 'success');
+    const updatedEv = evaluators.find((e) => e.id === editEvaluatorId);
+    if (updatedEv) {
+      showToast(`Packet ${editingPacket.packetNumber} updated & allotted to ${updatedEv.evaluatorName || updatedEv.name} in Evaluation Master.`, 'success');
+    } else {
+      showToast(`Packet ${editingPacket.packetNumber} updated successfully.`, 'success');
+    }
     setIsEditModalOpen(false);
 
     if (openSlipAfterSave) {
@@ -507,23 +655,175 @@ export const CourseLedgerView: React.FC = () => {
         </div>
       </div>
 
+      {/* Interactive Programme & Course Code Filter Bar */}
+      <div className="bg-white border border-zinc-200 rounded-2xl p-4 shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2.5">
+          <div className="flex items-center gap-2 text-xs font-bold text-zinc-900 uppercase tracking-wider">
+            <Filter className="w-4 h-4 text-indigo-600" />
+            <span>Select & Filter by Programme / Course</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isFilterActive && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer"
+                title="Reset all active filters"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Filters</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenGenericPacketModal}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer"
+                title="Form a new evaluation packet by selecting Programme & Course"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Form New Packet</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          {/* Programme Dropdown */}
+          <div className="sm:col-span-4">
+            <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Programme</span>
+            </label>
+            <select
+              value={filterProgramme}
+              onChange={(e) => handleProgrammeChange(e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-300 rounded-xl text-xs font-semibold text-zinc-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition cursor-pointer"
+            >
+              <option value="ALL">All Programmes ({availableProgrammes.length} programmes • {courseLedger.length} courses)</option>
+              {availableProgrammes.map((p) => (
+                <option key={p.code} value={p.code}>
+                  {p.code} ({p.scriptCount} scripts • {p.courseCount} courses)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Course Code Dropdown */}
+          <div className="sm:col-span-4">
+            <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Course Code</span>
+            </label>
+            <select
+              value={filterCourseCode}
+              onChange={(e) => setFilterCourseCode(e.target.value)}
+              className="w-full px-3 py-2 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-300 rounded-xl text-xs font-mono font-bold text-zinc-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition cursor-pointer"
+            >
+              <option value="ALL">
+                {filterProgramme === 'ALL'
+                  ? `All Courses (${availableCourseCodes.length})`
+                  : `All ${filterProgramme} Courses (${availableCourseCodes.length})`}
+              </option>
+              {availableCourseCodes.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} ({c.unassignedAvailable} ready / {c.totalReceived} total)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Instant Search Box */}
+          <div className="sm:col-span-4">
+            <label className="block text-[11px] font-bold text-zinc-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Search Course / Title</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter code, title (e.g. MEG-01, Poetry)..."
+                className="w-full pl-8 pr-8 py-2 bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-300 rounded-xl text-xs text-zinc-900 placeholder-zinc-400 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-hidden transition"
+              />
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="p-1 text-zinc-400 hover:text-zinc-600 absolute right-2 top-1/2 -translate-y-1/2 rounded cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Active Filters Summary Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-zinc-500 border-t border-zinc-100">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>Matching Ledger:</span>
+            <span className="font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200">
+              {filteredCourseLedger.length} of {courseLedger.length} Courses
+            </span>
+            <span>•</span>
+            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+              {filteredCourseLedger.reduce((sum, c) => sum + c.totalReceived, 0)} Scripts
+            </span>
+            <span>•</span>
+            <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              {filteredSessionPackets.length} Packets
+            </span>
+          </div>
+
+          {isFilterActive && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-zinc-400">Filters:</span>
+              {filterProgramme !== 'ALL' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                  Prog: {filterProgramme}
+                </span>
+              )}
+              {filterCourseCode !== 'ALL' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                  Course: {filterCourseCode}
+                </span>
+              )}
+              {searchQuery.trim() && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-900 border border-amber-200">
+                  "{searchQuery.trim()}"
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Course Aggregation Table */}
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 bg-zinc-50 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-2">
-          <div className="font-bold text-xs text-zinc-800 uppercase tracking-wider">
-            Active Courses Ledger ({courseLedger.length} Distinct Courses)
+          <div className="font-bold text-xs text-zinc-800 uppercase tracking-wider flex items-center gap-2">
+            <span>Active Courses Ledger</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-200/80 text-zinc-800 font-bold">
+              {filteredCourseLedger.length} of {courseLedger.length} Courses
+            </span>
           </div>
           <div className="flex items-center gap-4 text-[11px] text-zinc-500">
             <span>
-              Total Received: <strong className="text-zinc-900">{courseLedger.reduce((sum, c) => sum + c.totalReceived, 0)} Scripts</strong>
+              Total Received: <strong className="text-zinc-900">{filteredCourseLedger.reduce((sum, c) => sum + c.totalReceived, 0)} Scripts</strong>
             </span>
             <span>•</span>
             <span>
-              In Packets: <strong className="text-indigo-700">{courseLedger.reduce((sum, c) => sum + c.packetedScripts, 0)} Scripts</strong>
+              In Packets: <strong className="text-indigo-700">{filteredCourseLedger.reduce((sum, c) => sum + c.packetedScripts, 0)} Scripts</strong>
             </span>
             <span>•</span>
             <span>
-              Ready to Dispatch: <strong className="text-emerald-700">{courseLedger.reduce((sum, c) => sum + c.unassignedAvailable, 0)} Scripts</strong>
+              Ready to Dispatch: <strong className="text-emerald-700">{filteredCourseLedger.reduce((sum, c) => sum + c.unassignedAvailable, 0)} Scripts</strong>
             </span>
           </div>
         </div>
@@ -542,14 +842,31 @@ export const CourseLedgerView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
-              {courseLedger.length === 0 ? (
+              {filteredCourseLedger.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-zinc-400">
-                    No assignment scripts recorded in {currentSession}.
+                  <td colSpan={7} className="py-12 text-center text-zinc-500">
+                    <div className="max-w-xs mx-auto space-y-2">
+                      <Filter className="w-8 h-8 text-zinc-300 mx-auto" />
+                      <p className="font-semibold text-xs text-zinc-700">No courses match the selected filters.</p>
+                      <p className="text-[11px] text-zinc-400">
+                        {isFilterActive
+                          ? 'Try selecting another Programme or Course Code, or reset the filters.'
+                          : `No assignment scripts recorded in ${currentSession}.`}
+                      </p>
+                      {isFilterActive && (
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="mt-2 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                        >
+                          Reset Filters
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
-                courseLedger.map((course) => {
+                filteredCourseLedger.map((course) => {
                   const isFullyPacketed = course.unassignedAvailable === 0 && course.totalReceived > 0;
                   return (
                     <tr key={course.courseCode} className="hover:bg-zinc-50 transition">
@@ -599,11 +916,11 @@ export const CourseLedgerView: React.FC = () => {
                           <span className="text-zinc-400 italic text-[11px]">No packets formed</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
-                            {course.packetsFormed.map((pkt) => {
+                            {course.packetsFormed.map((pkt, pktIdx) => {
                               const ev = getEvaluatorInfo(pkt.evaluatorId);
                               return (
                                 <span
-                                  key={pkt.id}
+                                  key={`${pkt.id}-${pktIdx}`}
                                   className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                                     pkt.status === 'Evaluated'
                                       ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
@@ -655,15 +972,18 @@ export const CourseLedgerView: React.FC = () => {
 
       {/* Course Packets Tracking Section */}
       <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-xs">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-100 mb-4">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-100 mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <PackageCheck className="w-4 h-4 text-indigo-600" />
             <h3 className="font-bold text-zinc-900 text-sm">
               Session Packets Tracking ({currentSession})
             </h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-50 text-indigo-900 border border-indigo-200 font-bold">
+              {filteredSessionPackets.length} of {sessionPackets.length} Packets
+            </span>
           </div>
           <span className="text-xs text-zinc-500 font-medium">
-            {sessionPackets.length} Evaluation Packets • {sessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
+            {filteredSessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} of {sessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
           </span>
         </div>
 
@@ -671,13 +991,30 @@ export const CourseLedgerView: React.FC = () => {
           <div className="py-8 text-center text-xs text-zinc-400">
             No evaluation packets have been created for {currentSession} yet. Form a packet from the ledger above to dispatch scripts to evaluators.
           </div>
+        ) : filteredSessionPackets.length === 0 ? (
+          <div className="py-8 text-center text-xs text-zinc-500 space-y-2">
+            <PackageCheck className="w-8 h-8 text-zinc-300 mx-auto" />
+            <p className="font-semibold text-zinc-700">No evaluation packets match the selected filters.</p>
+            <p className="text-[11px] text-zinc-400">
+              Packets exist for other courses, but none match {filterProgramme !== 'ALL' ? `programme ${filterProgramme}` : ''}{filterCourseCode !== 'ALL' ? ` course ${filterCourseCode}` : ''}.
+            </p>
+            {isFilterActive && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="mt-2 px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sessionPackets.map((pkt) => {
+            {filteredSessionPackets.map((pkt, pktIdx) => {
               const ev = getEvaluatorInfo(pkt.evaluatorId);
               return (
                 <div
-                  key={pkt.id}
+                  key={`${pkt.id}-${pktIdx}`}
                   className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-3 text-xs flex flex-col justify-between"
                 >
                   <div className="space-y-3">
@@ -834,7 +1171,7 @@ export const CourseLedgerView: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-zinc-100 shrink-0">
               <div className="flex items-center gap-2 font-bold text-zinc-900 text-sm">
                 <PackageCheck className="w-4 h-4 text-indigo-600" />
-                Form Evaluation Packet ({selectedCourseForPacket})
+                <span>Form Evaluation Packet {selectedCourseForPacket ? `(${selectedCourseForPacket})` : ''}</span>
               </div>
               <button
                 type="button"
@@ -846,25 +1183,82 @@ export const CourseLedgerView: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreatePacketSubmit} className="mt-4 space-y-4 text-xs overflow-y-auto pr-1">
-              {/* Course header banner */}
-              <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Course Code</span>
-                    <span className="font-mono font-bold text-sm text-indigo-950 bg-white px-2 py-0.5 rounded border border-indigo-200 shadow-2xs">
-                      {selectedCourseForPacket}
-                    </span>
-                  </div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded border border-emerald-300">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    {selectedCourseScripts.length} Unassigned Scripts Available
+              {/* Programme & Course Selection Box */}
+              <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1">
+                    <Filter className="w-3 h-3 text-indigo-600" />
+                    <span>Select Programme & Course</span>
                   </span>
+                  {selectedCourseScripts.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded border border-emerald-300">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      {selectedCourseScripts.length} Unassigned Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-800 text-[10px] font-bold rounded border border-rose-300">
+                      0 Scripts Ready
+                    </span>
+                  )}
                 </div>
-                <div className="text-xs font-semibold text-indigo-900">
-                  {getCourseTitle(selectedCourseForPacket)}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <GraduationCap className="w-3 h-3 text-indigo-600" />
+                      <span>Programme</span>
+                    </label>
+                    <select
+                      value={modalProgramme}
+                      onChange={(e) => {
+                        const newProg = e.target.value;
+                        setModalProgramme(newProg);
+                        const progCourses = courseLedger.filter(
+                          (c) => (c.programmeCode || '').toUpperCase() === newProg.toUpperCase()
+                        );
+                        const withReady = progCourses.find((c) => c.unassignedAvailable > 0);
+                        if (withReady) {
+                          handleCourseSelectionInModal(withReady.courseCode);
+                        } else if (progCourses.length > 0) {
+                          handleCourseSelectionInModal(progCourses[0].courseCode);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-zinc-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {availableProgrammes.map((p) => (
+                        <option key={p.code} value={p.code}>
+                          {p.code} ({p.courseCount} courses • {p.unassignedCount} ready)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-indigo-600" />
+                      <span>Course Code</span>
+                    </label>
+                    <select
+                      value={selectedCourseForPacket}
+                      onChange={(e) => handleCourseSelectionInModal(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs font-mono font-bold text-zinc-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {modalAvailableCourses.map((c) => (
+                        <option key={c.courseCode} value={c.courseCode}>
+                          {c.courseCode} — {c.unassignedAvailable} ready of {c.totalReceived}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="text-[11px] text-indigo-700">
-                  Duplicate Dispatch Check: Only unassigned scripts are included. Scripts already dispatched in existing packets are protected from re-dispatch.
+
+                <div className="pt-1.5 border-t border-indigo-200/80 flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                  <div className="text-xs font-semibold text-indigo-950 truncate max-w-[340px]">
+                    {selectedCourseForPacket} • {getCourseTitle(selectedCourseForPacket, modalProgramme)}
+                  </div>
+                  <div className="text-[10px] text-indigo-700 italic">
+                    Protected: already dispatched scripts are excluded
+                  </div>
                 </div>
               </div>
 

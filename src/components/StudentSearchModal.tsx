@@ -698,7 +698,7 @@ export const StudentSearchModal: React.FC = () => {
                       </div>
                     ) : (
                       <div className="space-y-2.5">
-                        {activeStudentEvaluations.map((evalRec) => {
+                        {activeStudentEvaluations.map((evalRec, idx) => {
                           const evaluatorObj = evaluators.find((e) => e.id === evalRec.evaluatorId);
 
                           let stepLabel = 'Intake Desk Registered';
@@ -717,7 +717,7 @@ export const StudentSearchModal: React.FC = () => {
 
                           return (
                             <div
-                              key={evalRec.id}
+                              key={`${evalRec.id || evalRec.subId}-${idx}`}
                               className="bg-white border border-zinc-200 rounded-xl p-3.5 shadow-2xs space-y-2.5 transition hover:border-zinc-300"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">

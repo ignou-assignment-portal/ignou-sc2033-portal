@@ -1149,13 +1149,13 @@ export const CourseSubmissionsTracker: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredSubmissions.map((sub) => {
+                    filteredSubmissions.map((sub, idx) => {
                       const isSubmitted = sub.status === 'submitted';
                       const isSelected = selectedSubmissions.includes(sub.id);
 
                       return (
                         <tr
-                          key={sub.id}
+                          key={`${sub.id}-${idx}`}
                           className={`hover:bg-zinc-50/80 transition ${
                             isSelected ? 'bg-indigo-50/40' : ''
                           }`}

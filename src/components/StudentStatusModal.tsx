@@ -232,9 +232,9 @@ export const StudentStatusModal: React.FC<StudentStatusModalProps> = ({
               </div>
             ) : (
               <div className="space-y-2">
-                {intakeSubmissions.map((sub) => (
+                {intakeSubmissions.map((sub, sIdx) => (
                   <div
-                    key={sub.id}
+                    key={`${sub.id || sub.tokenNo}-${sIdx}`}
                     className="p-3 bg-white border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs"
                   >
                     <div>

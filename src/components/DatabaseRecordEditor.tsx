@@ -579,7 +579,7 @@ export const DatabaseRecordEditor: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredEvaluations.map((row) => {
+                    filteredEvaluations.map((row, idx) => {
                       const isSelected = selectedRowIds.includes(row.id);
                       const isPrac = Boolean(row.isPractical || row.componentType === 'Practical');
                       const enr = row.enrollmentNo || (row as any).Enrollment_No;
@@ -591,7 +591,7 @@ export const DatabaseRecordEditor: React.FC = () => {
 
                       return (
                         <tr
-                          key={row.id || row.subId}
+                          key={`${row.id || row.subId}-${idx}`}
                           className={`hover:bg-slate-50 transition ${
                             isSelected ? 'bg-indigo-50/50' : ''
                           }`}
@@ -719,8 +719,8 @@ export const DatabaseRecordEditor: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredIntakes.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50 transition">
+                    filteredIntakes.map((row, idx) => (
+                      <tr key={`${row.id}-${idx}`} className="hover:bg-slate-50 transition">
                         <td className="p-3 font-mono font-bold text-slate-900">{row.tokenNo}</td>
                         <td className="p-3 font-mono text-slate-700">{row.enrollmentNo}</td>
                         <td className="p-3 font-medium text-slate-800">{row.studentName}</td>

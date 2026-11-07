@@ -1265,7 +1265,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const data: CourseEvaluationRecord[] = JSON.parse(saved);
         if (Array.isArray(data) && data.length > 0) {
           const list = data.filter((rec) => !isDummyEvaluationId(rec.id, rec.intakeId, rec.enrollmentNo));
-          return list.map((rec) => {
+          const seenKeySet = new Set<string>();
+          const deduplicatedList: CourseEvaluationRecord[] = [];
+
+          list.forEach((rec) => {
             const isBrl = /^BRL[-_]?\d+/i.test(rec.courseCode || (rec as any).Course_Code || '');
             const isPrac = !isBrl && Boolean(rec.isPractical || rec.componentType === 'Practical');
             const compType: 'Assignment' | 'Practical' = isPrac ? 'Practical' : 'Assignment';
@@ -1276,7 +1279,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? rec.id.replace(/_PRAC_/g, '_')
               : rec.id;
 
-            return {
+            const enr = String(rec.enrollmentNo || (rec as any).Enrollment_No || '').trim().toUpperCase();
+            const code = String(rec.courseCode || (rec as any).Course_Code || '')
+              .replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '')
+              .trim()
+              .toUpperCase();
+            const sess = normalizeSession(rec.session || (rec as any).Session || 'July 2026');
+            const dedupeKey = (enr && code) ? `${enr}_${code}_${sess}_${compType}` : String(cleanId || cleanSubId).trim();
+
+            if (seenKeySet.has(dedupeKey)) return;
+            seenKeySet.add(dedupeKey);
+            if (cleanId) seenKeySet.add(cleanId);
+            if (cleanSubId) seenKeySet.add(cleanSubId);
+
+            deduplicatedList.push({
               ...rec,
               id: cleanId,
               subId: cleanSubId,
@@ -1284,10 +1300,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               submissionKey: cleanSubId,
               componentType: compType,
               isPractical: isPrac,
-              Component: compType,
               lockedBy: rec.lockedBy?.includes('Aggarwal') ? 'Dr. Sant K. Gupta (Coordinator)' : rec.lockedBy,
-            };
+            });
           });
+          return deduplicatedList;
         }
       }
       return [];
@@ -2782,13 +2798,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const existingKeySet = new Set<string>();
+    const deduplicatedEvalsForSession: CourseEvaluationRecord[] = [];
+
     evalsForSession.forEach((ce: any) => {
       const enr = (ce.enrollmentNo || ce.Enrollment_No || '').toString().trim().toUpperCase();
-      const code = (ce.courseCode || ce.Course_Code || '').toString().trim().toUpperCase();
+      const rawCode = (ce.courseCode || ce.Course_Code || '').toString().trim();
+      const code = rawCode.replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '').trim().toUpperCase();
       const sess = normalizeSession(ce.Session || ce.session || currentSession);
       const isPrac = Boolean(ce.isPractical || ce.componentType === 'Practical');
-      existingKeySet.add(`${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`);
-      existingKeySet.add(`${enr}_${code}_${sess}`);
+      const compKey = `${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+      const basicKey = `${enr}_${code}_${sess}`;
+      const subId = String(ce.subId || ce.Sub_ID || ce.id || '').trim();
+
+      if (!existingKeySet.has(compKey) && !existingKeySet.has(basicKey) && (!subId || !existingKeySet.has(subId))) {
+        existingKeySet.add(compKey);
+        existingKeySet.add(basicKey);
+        if (subId) existingKeySet.add(subId);
+        if (ce.id) existingKeySet.add(String(ce.id).trim());
+        deduplicatedEvalsForSession.push(ce);
+      }
     });
 
     const synthesizedFromIntakes: CourseEvaluationRecord[] = [];
@@ -2809,7 +2837,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const asgnSet = new Set((intake.assignmentCourses || []).map((c: string) => c.trim().toUpperCase()));
 
       courseList.forEach((rawC: string) => {
-        const cleanCourse = rawC.trim().toUpperCase();
+        const cleanCourse = rawC.replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '').trim().toUpperCase();
+        if (!cleanCourse) return;
         const isBrl = /^BRL[-_]?\d+/i.test(cleanCourse);
         let isPrac = false;
         if (!isBrl) {
@@ -2819,10 +2848,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const compKey = `${enr}_${cleanCourse}_${normSess}_${isPrac ? 'PRAC' : 'ASGN'}`;
         const basicKey = `${enr}_${cleanCourse}_${normSess}`;
+        const subSuffix = isPrac ? '_PRAC' : '';
+        const subId = `SUB_${enr}_${cleanCourse}${subSuffix}_${sess.replace(/\s+/g, '')}`;
 
-        if (!existingKeySet.has(compKey) && !existingKeySet.has(basicKey)) {
-          const subSuffix = isPrac ? '_PRAC' : '';
-          const subId = `SUB_${enr}_${cleanCourse}${subSuffix}_${sess.replace(/\s+/g, '')}`;
+        if (!existingKeySet.has(compKey) && !existingKeySet.has(basicKey) && !existingKeySet.has(subId)) {
           const restoredRow: CourseEvaluationRecord = {
             id: subId,
             subId,
@@ -2862,11 +2891,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           synthesizedFromIntakes.push(restoredRow);
           existingKeySet.add(compKey);
           existingKeySet.add(basicKey);
+          existingKeySet.add(subId);
         }
       });
     });
 
-    return [...evalsForSession, ...synthesizedFromIntakes];
+    return [...deduplicatedEvalsForSession, ...synthesizedFromIntakes];
   }, [courseEvaluations, sessionIntakes, currentSession]);
 
   const sessionPackets = useMemo(() => {
@@ -2905,7 +2935,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (sessionCourseEvaluations && sessionCourseEvaluations.length > 0) {
-      return sessionCourseEvaluations.map((ce: any) => {
+      const seenIds = new Set<string>();
+      const result: AssignmentSubmission[] = [];
+
+      sessionCourseEvaluations.forEach((ce: any) => {
         const enr = (ce.enrollmentNo || ce.Enrollment_No || '').toString().trim();
         const code = (ce.courseCode || ce.Course_Code || '').toString().trim().toUpperCase();
         const comp = ce.componentType || (ce.isPractical ? 'Practical' : 'Assignment');
@@ -2913,9 +2946,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const meta = subMetaMap.get(key);
 
         const subId = ce.subId || ce.id || meta?.id || `sub-${enr}-${code}`;
+        if (seenIds.has(subId)) return;
+        seenIds.add(subId);
+
         const status: SubmissionStatusType = meta?.status === 'not submitted' ? 'not submitted' : 'submitted';
 
-        return {
+        result.push({
           id: subId,
           studentId: enr,
           studentName: ce.candidateName || ce.studentName || meta?.studentName || '',
@@ -2934,15 +2970,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           Enrollment_No: enr,
           updatedAt: ce.updatedAt || new Date().toISOString(),
           updatedBy: ce.lockedBy || 'Desk Official',
-        } as unknown as AssignmentSubmission;
+        } as unknown as AssignmentSubmission);
       });
+      return result;
     }
 
+    const seenFallbacks = new Set<string>();
     return (assignmentSubmissions || []).filter((s: any) => {
       if (!s) return false;
       if (isDummySubmissionId(s.id, s.studentId, s.studentName)) return false;
-      if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") return true;
-      return normalizeSession(s.Session || s.session) === normalizeSession(currentSession);
+      if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") {
+        if (seenFallbacks.has(s.id)) return false;
+        seenFallbacks.add(s.id);
+        return true;
+      }
+      if (normalizeSession(s.Session || s.session) !== normalizeSession(currentSession)) return false;
+      if (seenFallbacks.has(s.id)) return false;
+      seenFallbacks.add(s.id);
+      return true;
     });
   }, [assignmentSubmissions, sessionCourseEvaluations, currentSession]);
 
@@ -4940,7 +4985,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             (e) =>
               e.id === evaluatorId ||
               e.evaluatorCode === evaluatorId ||
-              `${e.evaluatorName || e.name} (${e.evaluatorCode})` === evaluatorId
+              `${e.evaluatorName || e.name} (${e.evaluatorCode})` === evaluatorId ||
+              (e.evaluatorName && evaluatorId.includes(e.evaluatorName)) ||
+              (e.name && evaluatorId.includes(e.name))
           )
         : null;
       const now = new Date().toISOString();
@@ -4948,17 +4995,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const allottedBy = currentRole === 'ADMIN' ? 'Coordinator Desk' : 'Counter Desk Official';
       const evalDisplayName = ev ? `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` : null;
 
+      // Track affected records for synchronized packet dispatch update
+      const affectedRecords: CourseEvaluationRecord[] = [];
+
       setCourseEvaluations((prev) => {
         const updated = prev.map((rec) => {
-          if (!evaluationIds.includes(rec.id)) return rec;
+          const isMatch =
+            evaluationIds.includes(rec.id) ||
+            (rec.subId && evaluationIds.includes(rec.subId)) ||
+            (rec.Sub_ID && evaluationIds.includes(rec.Sub_ID)) ||
+            (rec.submissionKey && evaluationIds.includes(rec.submissionKey));
+          if (!isMatch) return rec;
           if (rec.isLocked && currentRole !== 'ADMIN') return rec;
 
-          return {
+          const updatedRec: CourseEvaluationRecord = {
             ...rec,
             evaluatorId: ev ? ev.id : null,
             evaluatorCode: ev ? ev.evaluatorCode : null,
             evaluatorName: ev ? (ev.evaluatorName || ev.name) : null,
-            Allotted_Evaluator: evalDisplayName,
+            Allotted_Evaluator: evalDisplayName || 'Unallotted',
             allottedDate: ev ? dateStr : null,
             allottedBy: ev ? allottedBy : null,
             status: (rec.isLocked
@@ -4970,6 +5025,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               : 'Pending Allotment') as EvaluationStatus,
             updatedAt: now,
           };
+          affectedRecords.push(updatedRec);
+          return updatedRec;
         });
 
         try {
@@ -4978,6 +5035,172 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         return updated;
       });
+
+      // VICE VERSA BIDIRECTIONAL SYNC: Synchronize affected scripts with Course Packets dispatch
+      if (affectedRecords.length > 0) {
+        setPackets((prevPackets) => {
+          let nextPackets = [...prevPackets];
+
+          // Group affected records by session and courseCode
+          const courseGroups = new Map<
+            string,
+            { session: string; courseCode: string; programmeCode: string; enrollments: string[] }
+          >();
+
+          affectedRecords.forEach((rec) => {
+            const cCode = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const sName = rec.session || rec.Session || currentSession;
+            const pCode = rec.programmeCode || rec.Programme || 'IGNOU';
+            const enr = (rec.enrollmentNo || rec.Enrollment_No || '').trim().toUpperCase();
+            if (!cCode || !enr) return;
+
+            const groupKey = `${normalizeSessionName(sName)}_${cCode}`;
+            if (!courseGroups.has(groupKey)) {
+              courseGroups.set(groupKey, {
+                session: sName,
+                courseCode: cCode,
+                programmeCode: pCode,
+                enrollments: [],
+              });
+            }
+            const grp = courseGroups.get(groupKey)!;
+            if (!grp.enrollments.includes(enr)) {
+              grp.enrollments.push(enr);
+            }
+          });
+
+          if (ev) {
+            // Case 1: Academic Counsellor assigned
+            courseGroups.forEach((group) => {
+              const normCourse = group.courseCode.trim().toUpperCase();
+              const normSess = normalizeSessionName(group.session);
+
+              // Check if any existing packet contains any of these candidate scripts
+              const existingPacketWithScript = nextPackets.find((p) => {
+                const pCourse = p.courseCode.trim().toUpperCase();
+                const pSess = normalizeSessionName(p.session);
+                if (pCourse !== normCourse || pSess !== normSess) return false;
+                const pEnrs = (p.assignedEnrollments || []).map((e) => e.trim().toUpperCase());
+                return group.enrollments.some((enr) => pEnrs.includes(enr));
+              });
+
+              if (existingPacketWithScript) {
+                nextPackets = nextPackets.map((pkt) => {
+                  if (pkt.id === existingPacketWithScript.id) {
+                    const mergedEnrollments = Array.from(
+                      new Set([...(pkt.assignedEnrollments || []), ...group.enrollments])
+                    );
+                    return {
+                      ...pkt,
+                      evaluatorId: ev.id,
+                      status: pkt.status === 'Evaluated' ? 'Evaluated' : 'Dispatched',
+                      assignedDate: pkt.assignedDate || dateStr,
+                      assignedEnrollments: mergedEnrollments,
+                      scriptCount: mergedEnrollments.length,
+                    };
+                  }
+                  return pkt;
+                });
+              } else {
+                // Check if an active packet for this course and evaluator exists
+                const existingActiveEvaluatorPacket = nextPackets.find((p) => {
+                  const pCourse = p.courseCode.trim().toUpperCase();
+                  const pSess = normalizeSessionName(p.session);
+                  return (
+                    pCourse === normCourse &&
+                    pSess === normSess &&
+                    p.evaluatorId === ev.id &&
+                    p.status !== 'Evaluated'
+                  );
+                });
+
+                if (existingActiveEvaluatorPacket) {
+                  nextPackets = nextPackets.map((pkt) => {
+                    if (pkt.id === existingActiveEvaluatorPacket.id) {
+                      const mergedEnrollments = Array.from(
+                        new Set([...(pkt.assignedEnrollments || []), ...group.enrollments])
+                      );
+                      return {
+                        ...pkt,
+                        assignedEnrollments: mergedEnrollments,
+                        scriptCount: mergedEnrollments.length,
+                      };
+                    }
+                    return pkt;
+                  });
+                } else {
+                  // Create a new CoursePacket for this course and evaluator
+                  const sessionCode = generateSessionCode(group.session);
+                  const cleanCode = group.courseCode.replace(/[^a-zA-Z0-9]/g, '');
+                  const existingForCourse = nextPackets.filter(
+                    (p) =>
+                      normalizeSessionName(p.session) === normSess &&
+                      p.courseCode.trim().toUpperCase() === normCourse
+                  );
+                  const packetNumber = `PKT-${sessionCode}-${cleanCode}-${String(
+                    existingForCourse.length + 1
+                  ).padStart(2, '0')}`;
+
+                  const newPkt: CoursePacket = {
+                    id: `pkt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                    session: group.session,
+                    packetNumber,
+                    courseCode: group.courseCode,
+                    programmeCode: group.programmeCode,
+                    evaluatorId: ev.id,
+                    scriptCount: group.enrollments.length,
+                    assignedDate: dateStr,
+                    expectedReturnDate: null,
+                    returnedDate: null,
+                    status: 'Dispatched',
+                    notes: `Created from Evaluation Master allotment to ${ev.evaluatorName || ev.name}`,
+                    assignedEnrollments: group.enrollments,
+                  };
+                  nextPackets = [newPkt, ...nextPackets];
+                }
+              }
+            });
+          } else {
+            // Case 2: Academic Counsellor unallotted / removed
+            courseGroups.forEach((group) => {
+              const normCourse = group.courseCode.trim().toUpperCase();
+              const normSess = normalizeSessionName(group.session);
+              const unallotEnrollments = new Set(group.enrollments.map((e) => e.trim().toUpperCase()));
+
+              nextPackets = nextPackets.map((pkt) => {
+                const pCourse = pkt.courseCode.trim().toUpperCase();
+                const pSess = normalizeSessionName(pkt.session);
+                if (pCourse !== normCourse || pSess !== normSess) return pkt;
+
+                const currentEnrs = pkt.assignedEnrollments || [];
+                const remaining = currentEnrs.filter((e) => !unallotEnrollments.has(e.trim().toUpperCase()));
+
+                if (remaining.length === 0) {
+                  return {
+                    ...pkt,
+                    evaluatorId: null,
+                    status: 'Formed',
+                    assignedDate: null,
+                    assignedEnrollments: [],
+                    scriptCount: 0,
+                  };
+                }
+
+                if (remaining.length !== currentEnrs.length) {
+                  return {
+                    ...pkt,
+                    assignedEnrollments: remaining,
+                    scriptCount: remaining.length,
+                  };
+                }
+                return pkt;
+              });
+            });
+          }
+
+          return nextPackets;
+        });
+      }
 
       // Dispatch ALLOT_EVALUATOR to Google Sheets
       if (ev) {
@@ -5005,7 +5228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       showToast('Saved & Synced with Google Sheet', 'success');
     },
-    [evaluators, currentRole, showToast, logAuditEvent, settings.coordinatorName, currentSession]
+    [evaluators, currentRole, showToast, logAuditEvent, settings.coordinatorName, currentSession, postAllotEvaluator]
   );
 
   const updateEvaluationMarks = useCallback(
@@ -5198,13 +5421,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [currentRole, isUrlLockedDeskMode, settings.coordinatorName, currentSession, showToast, logAuditEvent]
   );
 
-  // Course Packets
+  // Course Packets & Dispatch Synchronization
   const createPacket = useCallback(
-    (data: { courseCode: string; programmeCode: string; evaluatorId: string | null; scriptCount: number; expectedReturnDate?: string; notes?: string; assignedEnrollments?: string[] }) => {
+    (data: {
+      courseCode: string;
+      programmeCode: string;
+      evaluatorId: string | null;
+      scriptCount: number;
+      expectedReturnDate?: string;
+      notes?: string;
+      assignedEnrollments?: string[];
+    }) => {
       const sessionCode = generateSessionCode(currentSession);
       const cleanCode = data.courseCode.replace(/[^a-zA-Z0-9]/g, '');
       const existingPackets = packets.filter((p) => p.session === currentSession && p.courseCode === data.courseCode);
       const packetNumber = `PKT-${sessionCode}-${cleanCode}-${String(existingPackets.length + 1).padStart(2, '0')}`;
+      const now = new Date().toISOString();
+      const dateStr = now.split('T')[0];
 
       const newPacket: CoursePacket = {
         id: `pkt-${Date.now()}`,
@@ -5214,7 +5447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         programmeCode: data.programmeCode,
         evaluatorId: data.evaluatorId,
         scriptCount: data.scriptCount,
-        assignedDate: data.evaluatorId ? new Date().toISOString().split('T')[0] : null,
+        assignedDate: data.evaluatorId ? dateStr : null,
         expectedReturnDate: data.expectedReturnDate || null,
         returnedDate: null,
         status: data.evaluatorId ? 'Dispatched' : 'Formed',
@@ -5223,18 +5456,275 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
 
       setPackets((prev) => [newPacket, ...prev]);
+
+      // BIDIRECTIONAL SYNC: Automatically update candidate scripts in Evaluation Master
+      const assignedSet = new Set(
+        (data.assignedEnrollments || []).map((e) => String(e).trim().toUpperCase())
+      );
+      const normCourse = data.courseCode.trim().toUpperCase();
+      const normCurSess = normalizeSessionName(currentSession);
+
+      const ev = data.evaluatorId
+        ? evaluators.find(
+            (e) =>
+              e.id === data.evaluatorId ||
+              e.evaluatorCode === data.evaluatorId ||
+              `${e.evaluatorName || e.name} (${e.evaluatorCode})` === data.evaluatorId ||
+              (e.evaluatorName && data.evaluatorId.includes(e.evaluatorName)) ||
+              (e.name && data.evaluatorId.includes(e.name))
+          )
+        : null;
+      const evalDisplayName = ev ? `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` : null;
+      const allottedBy = currentRole === 'ADMIN' ? 'Coordinator Desk' : 'Counter Desk Official';
+      const affectedSubIds: string[] = [];
+
+      setCourseEvaluations((prev) => {
+        let changed = false;
+        const updated = prev.map((rec) => {
+          const recCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+          const recSession = normalizeSessionName(rec.session || rec.Session || '');
+          const recEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim().toUpperCase();
+
+          if (recCourse !== normCourse) return rec;
+          if (recSession && normCurSess && recSession !== normCurSess) return rec;
+          if (assignedSet.size > 0 && !assignedSet.has(recEnr)) return rec;
+
+          // Prevent overwriting locked marks unless coordinator
+          if (rec.isLocked && currentRole !== 'ADMIN') return rec;
+
+          changed = true;
+          affectedSubIds.push(rec.id);
+
+          return {
+            ...rec,
+            evaluatorId: ev ? ev.id : null,
+            evaluatorCode: ev ? ev.evaluatorCode : null,
+            evaluatorName: ev ? (ev.evaluatorName || ev.name) : null,
+            Allotted_Evaluator: evalDisplayName || 'Unallotted',
+            allottedDate: ev ? dateStr : null,
+            allottedBy: ev ? allottedBy : null,
+            status: (rec.isLocked
+              ? 'Marks Locked'
+              : rec.marks !== null
+              ? 'Evaluated'
+              : ev
+              ? 'Allotted'
+              : 'Pending Allotment') as EvaluationStatus,
+            updatedAt: now,
+          };
+        });
+
+        if (changed) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        }
+        return prev;
+      });
+
+      // Synchronize with Google Sheets backend
+      if (ev && affectedSubIds.length > 0) {
+        affectedSubIds.forEach((subId) => {
+          postAllotEvaluator(subId, {
+            id: ev.id,
+            name: ev.evaluatorName || ev.name,
+            evaluatorCode: ev.evaluatorCode,
+            Allotted_Evaluator: evalDisplayName,
+          }).catch((err) => console.warn(err));
+        });
+      }
+
       return newPacket;
     },
-    [currentSession, packets]
+    [currentSession, packets, evaluators, currentRole, postAllotEvaluator]
   );
 
-  const updatePacket = useCallback((id: string, updates: Partial<CoursePacket>) => {
-    setPackets((prev) => prev.map((pkt) => (pkt.id === id ? { ...pkt, ...updates } : pkt)));
-  }, []);
+  const updatePacket = useCallback(
+    (id: string, updates: Partial<CoursePacket>) => {
+      const now = new Date().toISOString();
+      const dateStr = now.split('T')[0];
+      const allottedBy = currentRole === 'ADMIN' ? 'Coordinator Desk' : 'Counter Desk Official';
 
-  const deletePacket = useCallback((id: string) => {
-    setPackets((prev) => prev.filter((pkt) => pkt.id !== id));
-  }, []);
+      let targetPkt: CoursePacket | undefined;
+      setPackets((prev) => {
+        return prev.map((pkt) => {
+          if (pkt.id === id) {
+            targetPkt = { ...pkt, ...updates };
+            return targetPkt;
+          }
+          return pkt;
+        });
+      });
+
+      // BIDIRECTIONAL SYNC: Synchronize candidate scripts in Evaluation Master
+      if (updates.evaluatorId !== undefined || updates.assignedEnrollments !== undefined) {
+        const currentPkt = targetPkt || packets.find((p) => p.id === id);
+        if (!currentPkt) return;
+
+        const effectiveEvaluatorId =
+          updates.evaluatorId !== undefined ? updates.evaluatorId : currentPkt.evaluatorId;
+        const effectiveEnrollments =
+          updates.assignedEnrollments !== undefined
+            ? updates.assignedEnrollments
+            : currentPkt.assignedEnrollments || [];
+
+        const assignedSet = new Set(effectiveEnrollments.map((e) => String(e).trim().toUpperCase()));
+        const prevAssignedSet = new Set(
+          (currentPkt.assignedEnrollments || []).map((e) => String(e).trim().toUpperCase())
+        );
+
+        const ev = effectiveEvaluatorId
+          ? evaluators.find(
+              (e) =>
+                e.id === effectiveEvaluatorId ||
+                e.evaluatorCode === effectiveEvaluatorId ||
+                `${e.evaluatorName || e.name} (${e.evaluatorCode})` === effectiveEvaluatorId ||
+                (e.evaluatorName && effectiveEvaluatorId.includes(e.evaluatorName)) ||
+                (e.name && effectiveEvaluatorId.includes(e.name))
+            )
+          : null;
+        const evalDisplayName = ev ? `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` : null;
+        const normCourse = currentPkt.courseCode.trim().toUpperCase();
+        const normSess = normalizeSessionName(currentPkt.session || currentSession);
+        const affectedSubIds: string[] = [];
+
+        setCourseEvaluations((prev) => {
+          let changed = false;
+          const updated = prev.map((rec) => {
+            const recCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const recSession = normalizeSessionName(rec.session || rec.Session || '');
+            const recEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim().toUpperCase();
+
+            if (recCourse !== normCourse) return rec;
+            if (recSession && normSess && recSession !== normSess) return rec;
+            if (rec.isLocked && currentRole !== 'ADMIN') return rec;
+
+            // Script is currently in packet
+            if (assignedSet.has(recEnr)) {
+              changed = true;
+              if (ev) affectedSubIds.push(rec.id);
+              return {
+                ...rec,
+                evaluatorId: ev ? ev.id : null,
+                evaluatorCode: ev ? ev.evaluatorCode : null,
+                evaluatorName: ev ? (ev.evaluatorName || ev.name) : null,
+                Allotted_Evaluator: evalDisplayName || 'Unallotted',
+                allottedDate: ev ? (rec.allottedDate || dateStr) : null,
+                allottedBy: ev ? (rec.allottedBy || allottedBy) : null,
+                status: (rec.isLocked
+                  ? 'Marks Locked'
+                  : rec.marks !== null
+                  ? 'Evaluated'
+                  : ev
+                  ? 'Allotted'
+                  : 'Pending Allotment') as EvaluationStatus,
+                updatedAt: now,
+              };
+            }
+
+            // Script was removed from packet
+            if (prevAssignedSet.has(recEnr) && !assignedSet.has(recEnr)) {
+              changed = true;
+              return {
+                ...rec,
+                evaluatorId: null,
+                evaluatorCode: null,
+                evaluatorName: null,
+                Allotted_Evaluator: 'Unallotted',
+                allottedDate: null,
+                allottedBy: null,
+                status: (rec.isLocked
+                  ? 'Marks Locked'
+                  : rec.marks !== null
+                  ? 'Evaluated'
+                  : 'Pending Allotment') as EvaluationStatus,
+                updatedAt: now,
+              };
+            }
+
+            return rec;
+          });
+
+          if (changed) {
+            try {
+              localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          }
+          return prev;
+        });
+
+        if (ev && affectedSubIds.length > 0) {
+          affectedSubIds.forEach((subId) => {
+            postAllotEvaluator(subId, {
+              id: ev.id,
+              name: ev.evaluatorName || ev.name,
+              evaluatorCode: ev.evaluatorCode,
+              Allotted_Evaluator: evalDisplayName,
+            }).catch((err) => console.warn(err));
+          });
+        }
+      }
+    },
+    [packets, evaluators, currentSession, currentRole, postAllotEvaluator]
+  );
+
+  const deletePacket = useCallback(
+    (id: string) => {
+      const targetPkt = packets.find((pkt) => pkt.id === id);
+      setPackets((prev) => prev.filter((pkt) => pkt.id !== id));
+
+      if (targetPkt && Array.isArray(targetPkt.assignedEnrollments) && targetPkt.assignedEnrollments.length > 0) {
+        const deletedEnrollments = new Set(
+          targetPkt.assignedEnrollments.map((e) => String(e).trim().toUpperCase())
+        );
+        const normCourse = targetPkt.courseCode.trim().toUpperCase();
+        const normSess = normalizeSessionName(targetPkt.session || currentSession);
+        const now = new Date().toISOString();
+
+        setCourseEvaluations((prev) => {
+          let changed = false;
+          const updated = prev.map((rec) => {
+            const recCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const recSession = normalizeSessionName(rec.session || rec.Session || '');
+            const recEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim().toUpperCase();
+
+            if (recCourse !== normCourse) return rec;
+            if (recSession && normSess && recSession !== normSess) return rec;
+            if (!deletedEnrollments.has(recEnr)) return rec;
+            if (rec.isLocked && currentRole !== 'ADMIN') return rec;
+
+            changed = true;
+            return {
+              ...rec,
+              evaluatorId: null,
+              evaluatorCode: null,
+              evaluatorName: null,
+              Allotted_Evaluator: 'Unallotted',
+              allottedDate: null,
+              allottedBy: null,
+              status: (rec.isLocked
+                ? 'Marks Locked'
+                : rec.marks !== null
+                ? 'Evaluated'
+                : 'Pending Allotment') as EvaluationStatus,
+              updatedAt: now,
+            };
+          });
+
+          if (changed) {
+            try {
+              localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          }
+          return prev;
+        });
+      }
+    },
+    [packets, currentSession, currentRole]
+  );
 
   // Evaluators Master
   const addEvaluator = useCallback((data: Omit<Evaluator, 'id' | 'lastSyncedAt'>) => {
@@ -5901,7 +6391,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         });
 
-        const completeCleanLedger = [...cleanLedger, ...synthesizedFromIntakesForLedger];
+        const rawCombinedLedger = [...cleanLedger, ...synthesizedFromIntakesForLedger];
+        const seenCleanLedgerKeys = new Set<string>();
+        const completeCleanLedger: CourseEvaluationRecord[] = [];
+
+        rawCombinedLedger.forEach((cl: any) => {
+          const enr = String(cl.enrollmentNo || cl.Enrollment_No || '').trim().toUpperCase();
+          const rawCode = String(cl.courseCode || cl.Course_Code || '').trim();
+          const code = rawCode.replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '').trim().toUpperCase();
+          const sess = normalizeSession(cl.session || cl.Session || 'July 2026');
+          const isPrac = Boolean(cl.isPractical || cl.componentType === 'Practical');
+          const compKey = `${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}`;
+          const basicKey = `${enr}_${code}_${sess}`;
+          const subId = String(cl.subId || cl.Sub_ID || cl.id || '').trim();
+
+          if (seenCleanLedgerKeys.has(compKey) || seenCleanLedgerKeys.has(basicKey) || (subId && seenCleanLedgerKeys.has(subId))) {
+            return;
+          }
+          seenCleanLedgerKeys.add(compKey);
+          seenCleanLedgerKeys.add(basicKey);
+          if (subId) seenCleanLedgerKeys.add(subId);
+          if (cl.id) seenCleanLedgerKeys.add(String(cl.id).trim());
+          completeCleanLedger.push(cl);
+        });
 
         setCourseEvaluations((prevEvals) => {
           const remoteSubIds = new Set((completeCleanLedger as any[]).map((c: any) => String(c.subId || c.Sub_ID || c.id || '').trim()));
@@ -7076,7 +7588,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (newEvaluationsToAdd.length > 0) {
       setCourseEvaluations((prev) => {
-        const combined = [...prev, ...newEvaluationsToAdd];
+        const seen = new Set<string>();
+        const combined: CourseEvaluationRecord[] = [];
+        [...prev, ...newEvaluationsToAdd].forEach((row) => {
+          const enr = String(row.enrollmentNo || (row as any).Enrollment_No || '').trim().toUpperCase();
+          const code = String(row.courseCode || (row as any).Course_Code || '')
+            .replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '')
+            .trim()
+            .toUpperCase();
+          const sess = normalizeSession(row.session || (row as any).Session || currentSession);
+          const isPrac = Boolean(row.isPractical || row.componentType === 'Practical');
+          const key = (enr && code) ? `${enr}_${code}_${sess}_${isPrac ? 'PRAC' : 'ASGN'}` : String(row.id || row.subId).trim();
+          if (seen.has(key)) return;
+          seen.add(key);
+          if (row.id) seen.add(String(row.id).trim());
+          if (row.subId) seen.add(String(row.subId).trim());
+          combined.push(row);
+        });
         try {
           localStorage.setItem(STORAGE_KEYS.COURSE_EVALUATIONS, JSON.stringify(combined));
         } catch {}

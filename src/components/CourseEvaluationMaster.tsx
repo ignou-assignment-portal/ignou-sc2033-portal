@@ -755,6 +755,19 @@ export const CourseEvaluationMaster: React.FC = () => {
             const programmeCode = record.Programme || record.programme || record.programmeCode || "-";
             const courseCode = record.Course_Code || record.courseCode || record["Course Code"] || "-";
             const evaluator = record.Allotted_Evaluator || record.allottedEvaluator || (record.evaluatorName && record.evaluatorCode ? `${record.evaluatorName} (${record.evaluatorCode})` : record.evaluatorName) || "Unallotted";
+            const matchedEvObj = evaluators.find((e) =>
+              e.id === record.evaluatorId ||
+              e.evaluatorCode === record.evaluatorCode ||
+              (record.Allotted_Evaluator && (
+                record.Allotted_Evaluator === `${e.evaluatorName || e.name} (${e.evaluatorCode})` ||
+                record.Allotted_Evaluator.includes(e.evaluatorCode) ||
+                record.Allotted_Evaluator.toLowerCase().includes((e.name || e.evaluatorName || '').toLowerCase())
+              )) ||
+              (record.evaluatorName && (e.evaluatorName === record.evaluatorName || e.name === record.evaluatorName))
+            );
+            const activeEvaluatorDisplay = matchedEvObj
+              ? `${matchedEvObj.evaluatorName || matchedEvObj.name} (${matchedEvObj.evaluatorCode})`
+              : (evaluator && evaluator !== 'Unallotted' ? evaluator : 'Unallotted');
             const rawMarks = record.Marks !== undefined && record.Marks !== "" && record.Marks !== null ? record.Marks : (record.marks !== undefined && record.marks !== null ? record.marks : null);
             const numericMarks = rawMarks !== null && rawMarks !== undefined && rawMarks !== "" && !isNaN(Number(rawMarks)) ? Number(rawMarks) : null;
             const gradeInfo = calculateIGNOUGrade(numericMarks);
@@ -762,7 +775,7 @@ export const CourseEvaluationMaster: React.FC = () => {
             const submissionKey = record.Sub_ID || record.subId || record.submissionKey || record.id || `SUB-${enr}-${courseCode}`;
             const tokenNo = record.Token_No || record.tokenNo || `TOK-${enr.slice(-4)}`;
             const isSelected = selectedIds.includes(recordId);
-            const status = record.Status || record.status || (isLocked ? 'Marks Locked' : numericMarks !== null ? 'Evaluated' : (evaluator && evaluator !== 'Unallotted') ? 'Allotted' : 'Pending');
+            const status = record.Status || record.status || (isLocked ? 'Marks Locked' : numericMarks !== null ? 'Evaluated' : (activeEvaluatorDisplay && activeEvaluatorDisplay !== 'Unallotted') ? 'Allotted' : 'Pending');
 
             return (
               <div
@@ -809,12 +822,12 @@ export const CourseEvaluationMaster: React.FC = () => {
                   </label>
                   {isLocked ? (
                     <div className="text-xs font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1.5 rounded-lg border border-zinc-200">
-                      {evaluator || 'Unallotted'}
+                      {activeEvaluatorDisplay}
                     </div>
                   ) : (
                     <select
                       id={`mobile-allot-eval-${recordId}`}
-                      value={evaluator}
+                      value={activeEvaluatorDisplay}
                       onChange={(e) => handleAllotEvaluator(record, e)}
                       className="w-full text-xs py-2 px-2.5 rounded-lg border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                     >
@@ -987,6 +1000,19 @@ export const CourseEvaluationMaster: React.FC = () => {
                   const programmeCode = record.Programme || record.programme || record.programmeCode || "-";
                   const courseCode = record.Course_Code || record.courseCode || record["Course Code"] || "-";
                   const evaluator = record.Allotted_Evaluator || record.allottedEvaluator || (record.evaluatorName && record.evaluatorCode ? `${record.evaluatorName} (${record.evaluatorCode})` : record.evaluatorName) || "Unallotted";
+                  const matchedEvObj = evaluators.find((e) =>
+                    e.id === record.evaluatorId ||
+                    e.evaluatorCode === record.evaluatorCode ||
+                    (record.Allotted_Evaluator && (
+                      record.Allotted_Evaluator === `${e.evaluatorName || e.name} (${e.evaluatorCode})` ||
+                      record.Allotted_Evaluator.includes(e.evaluatorCode) ||
+                      record.Allotted_Evaluator.toLowerCase().includes((e.name || e.evaluatorName || '').toLowerCase())
+                    )) ||
+                    (record.evaluatorName && (e.evaluatorName === record.evaluatorName || e.name === record.evaluatorName))
+                  );
+                  const activeEvaluatorDisplay = matchedEvObj
+                    ? `${matchedEvObj.evaluatorName || matchedEvObj.name} (${matchedEvObj.evaluatorCode})`
+                    : (evaluator && evaluator !== 'Unallotted' ? evaluator : 'Unallotted');
                   const rawMarks = record.Marks !== undefined && record.Marks !== "" && record.Marks !== null ? record.Marks : (record.marks !== undefined && record.marks !== null ? record.marks : null);
                   const numericMarks = rawMarks !== null && rawMarks !== undefined && rawMarks !== "" && !isNaN(Number(rawMarks)) ? Number(rawMarks) : null;
                   const gradeInfo = calculateIGNOUGrade(numericMarks);
@@ -1059,17 +1085,17 @@ export const CourseEvaluationMaster: React.FC = () => {
                         {isLocked ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium text-zinc-800">
-                              {evaluator || 'Unallotted'}
+                              {activeEvaluatorDisplay || 'Unallotted'}
                             </span>
                           </div>
                         ) : (
                           <div className="space-y-1">
                             <select
                               id={`allot-evaluator-select-${recordId}`}
-                              value={evaluator}
+                              value={activeEvaluatorDisplay}
                               onChange={(e) => handleAllotEvaluator(record, e)}
                               className={`w-full max-w-[240px] text-xs py-1.5 px-2 rounded-lg border focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer ${
-                                evaluator && evaluator !== 'Unallotted'
+                                activeEvaluatorDisplay && activeEvaluatorDisplay !== 'Unallotted'
                                   ? 'bg-blue-50/50 border-blue-200 text-blue-950 font-medium'
                                   : 'bg-zinc-50 border-zinc-200 text-zinc-600'
                               }`}
@@ -1308,7 +1334,7 @@ export const CourseEvaluationMaster: React.FC = () => {
                   {sessionCourseEvaluations
                     .filter((r) => !printCourseCode || r.courseCode === printCourseCode)
                     .map((row, idx) => (
-                      <tr key={row.id} className="border-b border-zinc-300">
+                      <tr key={`${row.id}-${idx}`} className="border-b border-zinc-300">
                         <td className="border border-zinc-400 p-2 text-center font-mono">{idx + 1}</td>
                         <td className="border border-zinc-400 p-2 font-mono text-[11px]">{row.submissionKey}</td>
                         <td className="border border-zinc-400 p-2 font-mono font-bold">{row.enrollmentNo}</td>

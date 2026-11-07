@@ -544,9 +544,9 @@ export const AssignmentStatusSummaryCard: React.FC<AssignmentStatusSummaryCardPr
                     </div>
                   ) : (
                     <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-                      {filteredPending.map((item) => (
+                      {filteredPending.map((item, idx) => (
                         <div
-                          key={item.id}
+                          key={`${item.id}-${idx}`}
                           className="p-3 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition text-xs"
                         >
                           <div className="flex items-start gap-3">
@@ -617,9 +617,9 @@ export const AssignmentStatusSummaryCard: React.FC<AssignmentStatusSummaryCardPr
                     </div>
                   ) : (
                     <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-                      {filteredVerified.map((item) => (
+                      {filteredVerified.map((item, idx) => (
                         <div
-                          key={item.id}
+                          key={`${item.id}-${idx}`}
                           className="p-3 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition text-xs"
                         >
                           <div className="flex items-start gap-3">

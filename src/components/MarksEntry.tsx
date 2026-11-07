@@ -770,7 +770,7 @@ export const MarksEntry: React.FC = () => {
 
                       return (
                         <tr
-                          key={student.id}
+                          key={`${student.id || student.enrollmentNo}-${idx}`}
                           className={`hover:bg-zinc-50/80 transition ${
                             asgnLock.isLocked && pracLock.isLocked
                               ? 'bg-purple-50/20'
@@ -1116,7 +1116,7 @@ export const MarksEntry: React.FC = () => {
                     const pracG = pracM !== null ? calculateIGNOUGrade(pracM).grade : '—';
 
                     return (
-                      <tr key={student.id}>
+                      <tr key={`${student.id || student.enrollmentNo}-${i}`}>
                         <td className="py-2 px-2 border-r border-zinc-300 text-center font-mono">
                           {i + 1}
                         </td>

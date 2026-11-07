@@ -970,7 +970,7 @@ export const AssignmentIntakePrintModal: React.FC<AssignmentIntakePrintModalProp
                   </thead>
                   <tbody className="divide-y divide-zinc-300 text-zinc-800">
                     {practicalScheduleItems.map((item, idx) => (
-                      <tr key={item.id} className={idx % 2 === 1 ? 'bg-purple-50/20' : 'bg-white'}>
+                      <tr key={`${item.id}-${idx}`} className={idx % 2 === 1 ? 'bg-purple-50/20' : 'bg-white'}>
                         <td className="py-2 px-2.5 text-center font-mono font-bold text-zinc-600 border-r border-zinc-300">
                           {idx + 1}
                         </td>
