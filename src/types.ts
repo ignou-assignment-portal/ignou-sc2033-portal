@@ -567,6 +567,47 @@ export interface DiscrepancyReport {
   duplicatesTrimmed?: number;
 }
 
+export type DiagnosticDiscrepancyType =
+  | 'MISSING_IN_COURSE_LEDGER'
+  | 'ORPHAN_IN_COURSE_LEDGER'
+  | 'EVALUATOR_DISCREPANCY'
+  | 'STATUS_MISMATCH';
+
+export interface DiagnosticDiscrepancyItem {
+  id: string;
+  assignmentId: string;
+  subId?: string;
+  enrollmentNo: string;
+  candidateName: string;
+  courseCode: string;
+  session: string;
+  tokenNo?: string;
+  discrepancyType: DiagnosticDiscrepancyType;
+  severity: 'error' | 'warning' | 'info';
+  courseLedgerEvaluator?: string;
+  expectedEvaluator?: string;
+  statusInLedger?: string;
+  statusInIntake?: string;
+  details: string;
+  suggestedFix: string;
+}
+
+export interface DiagnosticConsistencyReport {
+  timestamp: string;
+  totalIntakesChecked: number;
+  expectedScriptsFromIntakes: number;
+  totalCourseLedgerScripts: number;
+  matchedScriptsCount: number;
+  missingInLedgerCount: number;
+  orphanInLedgerCount: number;
+  evaluatorDiscrepanciesCount: number;
+  allottedEvaluatorsCount: number;
+  unallottedEvaluatorsCount: number;
+  discrepancies: DiagnosticDiscrepancyItem[];
+  summary: string;
+  isConsistent: boolean;
+}
+
 export interface CustomCourse {
   code: string;
   title: string;

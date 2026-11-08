@@ -748,11 +748,11 @@ function doPost(e) {
         var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
         var enrCol = colMap["enrollmentno"] || colMap["enrollment"] || colMap["enr"] || 3;
         var courseCol = colMap["coursecode"] || colMap["course"] || 8;
-        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["counsellor"] || colMap["evaluatorname"] || 9;
-        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 0;
-        var marksCol = colMap["marks"] || 10;
-        var gradeCol = colMap["grade"] || 11;
-        var statusCol = colMap["status"] || 12;
+        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || colMap["counsellor"] || colMap["evaluatorname"] || 10;
+        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 11;
+        var marksCol = colMap["marks"] || 12;
+        var gradeCol = colMap["grade"] || 13;
+        var statusCol = colMap["status"] || 14;
 
         var itemsToProcess = [];
         if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
@@ -779,6 +779,9 @@ function doPost(e) {
           var evalVal = item.evaluator || item.Allotted_Evaluator || item.evaluatorName || "";
           var evalCodeVal = item.evaluatorCode || "";
 
+          var cleanEnr = function(v) { return String(v || "").replace(/^['"]+/, "").replace(/\s+/g, "").toUpperCase(); };
+          var cleanCourse = function(v) { return String(v || "").replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); };
+
           for (var row = 1; row < data.length; row++) {
             var rowSubId = String(data[row][subIdCol - 1] || "").trim();
             var normRowSubId = rowSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -790,7 +793,7 @@ function doPost(e) {
               normRowSubId.indexOf(normTargetSubId) !== -1 ||
               normTargetSubId.indexOf(normRowSubId) !== -1
             );
-            var isEnrCourseMatch = targetEnr && targetCourse && rowEnr === targetEnr && rowCourse === targetCourse;
+            var isEnrCourseMatch = targetEnr && targetCourse && cleanEnr(rowEnr) === cleanEnr(targetEnr) && cleanCourse(rowCourse) === cleanCourse(targetCourse);
 
             if (isSubIdMatch || isEnrCourseMatch) {
               if (action === "UPDATE_MARKS") {

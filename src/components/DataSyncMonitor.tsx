@@ -21,7 +21,17 @@ import {
   UserCheck,
   KeyRound,
   Search,
+  Code,
+  Copy,
+  Check,
+  FileDown,
+  ShieldAlert,
 } from 'lucide-react';
+import {
+  verifyCourseLedgerIntakeConsistency,
+  exportDiagnosticReportJSON,
+} from '../utils/diagnosticConsistencyUtility';
+import { DiagnosticConsistencyReport } from '../types';
 
 export const DataSyncMonitor: React.FC = () => {
   const {
@@ -45,12 +55,22 @@ export const DataSyncMonitor: React.FC = () => {
     evaluatorSyncLogs,
     resyncAllEvaluatorsToSheets,
     clearEvaluatorSyncLogs,
+    allIntakes,
+    allCourseEvaluations,
+    evaluators,
+    packets,
+    currentSession,
+    showToast,
   } = useApp();
 
   const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [retryingItemId, setRetryingItemId] = useState<string | null>(null);
   const [isResyncingEvaluators, setIsResyncingEvaluators] = useState(false);
   const [syncLogFilter, setSyncLogFilter] = useState('');
+  const [consistencyReport, setConsistencyReport] = useState<DiagnosticConsistencyReport | null>(null);
+  const [isAuditingConsistency, setIsAuditingConsistency] = useState(false);
+  const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
 
   // Close drawer on Escape key
   useEffect(() => {
@@ -92,9 +112,125 @@ export const DataSyncMonitor: React.FC = () => {
     setIsResyncingEvaluators(true);
     try {
       await resyncAllEvaluatorsToSheets();
+      runDiagnosticConsistencyAudit();
     } finally {
       setIsResyncingEvaluators(false);
     }
+  };
+
+  const runDiagnosticConsistencyAudit = () => {
+    setIsAuditingConsistency(true);
+    try {
+      const rep = verifyCourseLedgerIntakeConsistency({
+        intakes: allIntakes || [],
+        courseEvaluations: allCourseEvaluations || [],
+        evaluators: evaluators || [],
+        packets: packets || [],
+        targetSession: currentSession,
+      });
+      setConsistencyReport(rep);
+      if (rep.evaluatorDiscrepanciesCount > 0) {
+        showToast?.(`Detected ${rep.evaluatorDiscrepanciesCount} evaluator discrepancies between Intake & Course Ledger`, 'warning');
+      } else {
+        showToast?.('Intake vs Course Ledger consistency verified successfully', 'success');
+      }
+    } finally {
+      setIsAuditingConsistency(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSyncDrawerOpen && !consistencyReport && !isAuditingConsistency) {
+      runDiagnosticConsistencyAudit();
+    }
+  }, [isSyncDrawerOpen]);
+
+  const handleDownloadReport = () => {
+    if (!consistencyReport) return;
+    exportDiagnosticReportJSON(consistencyReport);
+  };
+
+  const appsScriptCodeSnippet = `/**
+ * IGNOU SC-2033 Course_Ledger Evaluator Allotment Patch
+ * Paste into Google Sheets > Extensions > Apps Script (Code.gs)
+ * Corrects Column 10 (Allotted_Evaluator) and Column 11 (Evaluator_Code) writeback
+ */
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(15000);
+  try {
+    var contents = e.postData.contents;
+    var request = JSON.parse(contents);
+    var action = request.action;
+    var payload = request.payload;
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    if (action === "ALLOT_EVALUATOR" || action === "BATCH_ALLOT_EVALUATOR" || action === "UPDATE_MARKS") {
+      var ledger = ss.getSheetByName("Course_Ledger") || ss.getSheetByName("2_Course_Evaluation_Master");
+      if (!ledger) return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Course_Ledger not found" }));
+      
+      var data = ledger.getDataRange().getValues();
+      var headers = data[0];
+      var colMap = {};
+      for (var c = 0; c < headers.length; c++) {
+        colMap[String(headers[c] || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "")] = c + 1;
+      }
+      
+      var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
+      var enrCol = colMap["enrollmentno"] || colMap["enrollment"] || 3;
+      var courseCol = colMap["coursecode"] || colMap["course"] || 8;
+      var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || 10;
+      var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 11;
+      var marksCol = colMap["marks"] || 12;
+      var gradeCol = colMap["grade"] || 13;
+      var statusCol = colMap["status"] || 14;
+      
+      var items = (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) ? payload.assignments : [payload];
+      var updated = 0;
+      
+      var cleanEnr = function(v) { return String(v || "").replace(/^['"]+/, "").replace(/\\s+/g, "").toUpperCase(); };
+      var cleanCourse = function(v) { return String(v || "").replace(/\\s*[\\[\\(].*?[\\]\\)]/g, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); };
+      
+      for (var p = 0; p < items.length; p++) {
+        var it = items[p];
+        var tSubId = String(it.subId || it.assignmentId || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        var tEnr = cleanEnr(it.enrollmentNo);
+        var tCourse = cleanCourse(it.courseCode);
+        var evalName = it.evaluator || it.Allotted_Evaluator || it.evaluatorName || "";
+        var evalCode = it.evaluatorCode || "";
+        
+        for (var r = 1; r < data.length; r++) {
+          var rSubId = String(data[r][subIdCol - 1] || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          var rEnr = cleanEnr(data[r][enrCol - 1]);
+          var rCourse = cleanCourse(data[r][courseCol - 1]);
+          
+          if ((tSubId && rSubId === tSubId) || (tEnr && tCourse && rEnr === tEnr && rCourse === tCourse)) {
+            if (action === "UPDATE_MARKS") {
+              if (marksCol > 0) ledger.getRange(r + 1, marksCol).setValue(it.marks !== undefined ? it.marks : "");
+              if (gradeCol > 0) ledger.getRange(r + 1, gradeCol).setValue(it.grade || "");
+              if (statusCol > 0) ledger.getRange(r + 1, statusCol).setValue("Marks Locked");
+            } else {
+              if (evalCol > 0) ledger.getRange(r + 1, evalCol).setValue(evalName || "Allotted");
+              if (evalCodeCol > 0 && evalCode) ledger.getRange(r + 1, evalCodeCol).setValue(evalCode);
+              if (statusCol > 0) ledger.getRange(r + 1, statusCol).setValue(evalName && evalName !== "Unallotted" ? "Allotted" : "Pending Allotment");
+            }
+            updated++;
+            break;
+          }
+        }
+      }
+      SpreadsheetApp.flush();
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", updated: updated }));
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}`;
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(appsScriptCodeSnippet);
+    setCopiedScript(true);
+    setTimeout(() => setCopiedScript(false), 2500);
   };
 
   const filteredLogs = (evaluatorSyncLogs || []).filter((entry) => {
@@ -384,6 +520,149 @@ export const DataSyncMonitor: React.FC = () => {
                 </div>
               </div>
 
+              {/* CourseLedger vs Intake Register Consistency & Evaluator Discrepancy Diagnostic */}
+              <div className="border border-zinc-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="bg-zinc-100/70 px-4 py-3 border-b border-zinc-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-indigo-700" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-800">
+                      Intake vs CourseLedger Consistency Diagnostic
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={runDiagnosticConsistencyAudit}
+                      disabled={isAuditingConsistency}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                      title="Run relational consistency audit between Intake Register and Course Ledger"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isAuditingConsistency ? 'animate-spin' : ''}`} />
+                      <span>{isAuditingConsistency ? 'Auditing...' : 'Run Audit'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAppsScriptModal(true)}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-zinc-200 hover:bg-zinc-300 text-zinc-800 rounded-lg transition cursor-pointer"
+                      title="View & copy patched Google Apps Script code for Google Sheets"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      <span>Apps Script Patch</span>
+                    </button>
+
+                    {consistencyReport && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadReport}
+                        className="p-1 text-zinc-500 hover:text-zinc-800 transition cursor-pointer"
+                        title="Download Diagnostic Report as JSON"
+                      >
+                        <FileDown className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                      <div className="text-[10px] uppercase font-semibold text-zinc-500">Intake Scripts</div>
+                      <div className="text-base font-black font-mono text-zinc-900">
+                        {consistencyReport?.expectedScriptsFromIntakes ?? '—'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                      <div className="text-[10px] uppercase font-semibold text-zinc-500">Ledger Records</div>
+                      <div className="text-base font-black font-mono text-zinc-900">
+                        {consistencyReport?.totalCourseLedgerScripts ?? '—'}
+                      </div>
+                    </div>
+                    <div className={`p-2.5 rounded-lg border ${
+                      (consistencyReport?.evaluatorDiscrepanciesCount || 0) > 0
+                        ? 'bg-rose-50 border-rose-200 text-rose-900'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    }`}>
+                      <div className="text-[10px] uppercase font-semibold">Evaluator Discrepancies</div>
+                      <div className="text-base font-black font-mono">
+                        {consistencyReport?.evaluatorDiscrepanciesCount ?? '0'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                      <div className="text-[10px] uppercase font-semibold text-zinc-500">Relational Parity</div>
+                      <div className="text-base font-black font-mono text-indigo-700">
+                        {consistencyReport
+                          ? `${consistencyReport.expectedScriptsFromIntakes > 0 ? Math.round((consistencyReport.matchedScriptsCount / consistencyReport.expectedScriptsFromIntakes) * 100) : 100}%`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Evaluator Discrepancy Highlight Alert */}
+                  {consistencyReport && consistencyReport.evaluatorDiscrepanciesCount > 0 ? (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs space-y-2 text-amber-950">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Evaluator Discrepancies Detected ({consistencyReport.evaluatorDiscrepanciesCount})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResyncAllEvaluators}
+                          disabled={isResyncingEvaluators}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isResyncingEvaluators ? 'animate-spin' : ''}`} />
+                          <span>{isResyncingEvaluators ? 'Re-Syncing...' : 'Fix & Sync All to Sheets'}</span>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-800">
+                        Evaluator allotments in Course Packets / Evaluation Master are not recorded or match Column 10 in Course_Ledger. Click above to synchronize all allotted academic counsellors.
+                      </p>
+
+                      {/* Discrepancy Table */}
+                      <div className="max-h-48 overflow-y-auto rounded border border-amber-200 bg-white">
+                        <table className="w-full text-left text-[11px]">
+                          <thead className="bg-amber-100/60 text-amber-900 border-b border-amber-200 font-semibold sticky top-0">
+                            <tr>
+                              <th className="p-1.5">Candidate</th>
+                              <th className="p-1.5">Course</th>
+                              <th className="p-1.5">Expected Evaluator</th>
+                              <th className="p-1.5">Course Ledger Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-100">
+                            {consistencyReport.discrepancies
+                              .filter((d) => d.discrepancyType === 'EVALUATOR_DISCREPANCY')
+                              .slice(0, 15)
+                              .map((item, idx) => (
+                                <tr key={idx} className="hover:bg-amber-50/50">
+                                  <td className="p-1.5 font-mono">
+                                    <div className="font-bold text-zinc-900">{item.enrollmentNo}</div>
+                                    <div className="text-[10px] text-zinc-500 truncate max-w-[120px]">{item.candidateName}</div>
+                                  </td>
+                                  <td className="p-1.5 font-mono font-bold text-indigo-700">{item.courseCode}</td>
+                                  <td className="p-1.5 text-zinc-900 font-medium">{item.expectedEvaluator || 'Unallotted'}</td>
+                                  <td className="p-1.5 text-rose-700 font-medium">{item.courseLedgerEvaluator || 'Blank / Missing'}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : consistencyReport ? (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs flex items-center gap-2 text-emerald-900">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-medium">
+                        Complete Evaluator Parity: All {consistencyReport.matchedScriptsCount} scripts in Course Ledger have synchronized evaluator allotments.
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               {/* IndexedDB Pending Outgoing Queue */}
               <div className="border border-zinc-200 rounded-xl overflow-hidden">
                 <div className="bg-zinc-100/70 px-4 py-3 border-b border-zinc-200 flex items-center justify-between">
@@ -666,6 +945,79 @@ export const DataSyncMonitor: React.FC = () => {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Patched Apps Script Code Modal */}
+      {showAppsScriptModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-zinc-200 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-200 bg-zinc-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Code className="w-5 h-5 text-indigo-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Google Apps Script Evaluator Allotment Patch</h3>
+                  <p className="text-[11px] text-zinc-400">Maps Allotted_Evaluator directly to Column 10 in Course_Ledger</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAppsScriptModal(false)}
+                className="p-1 text-zinc-400 hover:text-white rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+                <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                  Why is this patch needed for Google Sheets?
+                </p>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Your Google Sheet has 17 columns with <strong>Column 9 as Component_Type</strong> and <strong>Column 10 as Allotted_Evaluator</strong>. The legacy script previously wrote to column 9, leaving Column 10 unpopulated. Copy this corrected handler into your spreadsheet&apos;s Apps Script editor.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-zinc-700">Google Apps Script (Code.gs):</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyScript}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition shadow-2xs cursor-pointer"
+                  >
+                    {copiedScript ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedScript ? 'Copied to Clipboard!' : 'Copy Code'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-3 bg-zinc-900 text-emerald-400 rounded-lg text-[11px] font-mono overflow-x-auto max-h-72 border border-zinc-800">
+                  {appsScriptCodeSnippet}
+                </pre>
+              </div>
+
+              <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-lg text-xs space-y-1.5 text-zinc-700">
+                <p className="font-bold text-zinc-900">How to deploy in 30 seconds:</p>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-zinc-600">
+                  <li>Open your Google Sheet &gt; <strong>Extensions &gt; Apps Script</strong>.</li>
+                  <li>Paste this function into your <code className="bg-zinc-200 px-1 rounded">Code.gs</code> file.</li>
+                  <li>Click <strong>Deploy &gt; Manage deployments &gt; Edit &gt; New version &gt; Deploy</strong>.</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 bg-zinc-50 border-t border-zinc-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAppsScriptModal(false)}
+                className="px-4 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-300 rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

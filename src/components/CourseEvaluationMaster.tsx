@@ -191,64 +191,53 @@ export const CourseEvaluationMaster: React.FC = () => {
     e: React.ChangeEvent<HTMLSelectElement>
   ) => {
     const selectedEvaluator = e.target.value;
+    const isUnallotted = !selectedEvaluator || selectedEvaluator === "Unallotted";
 
-    // Build robust payload with composite fallback keys:
-    const payload = {
-      subId: (row.Sub_ID || row.subId || "").toString().trim(),
-      subIds: [(row.Sub_ID || row.subId || "").toString().trim()],
-      enrollmentNo: (row.Enrollment_No || row.enrollmentNo || "").toString().replace(/^'/, '').trim(),
-      courseCode: (row.Course_Code || row.courseCode || "").toString().trim().toUpperCase(),
-      evaluator: selectedEvaluator
-    };
+    const matchedEv = isUnallotted
+      ? null
+      : evaluators.find((ev) =>
+          ev.id === selectedEvaluator ||
+          ev.evaluatorCode === selectedEvaluator ||
+          `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` === selectedEvaluator ||
+          (selectedEvaluator && (
+            selectedEvaluator.toLowerCase().includes((ev.name || ev.evaluatorName || '').toLowerCase()) ||
+            (ev.evaluatorCode && selectedEvaluator.toLowerCase().includes(ev.evaluatorCode.toLowerCase()))
+          ))
+        );
+
+    const evalDisplayName = isUnallotted
+      ? 'Unallotted'
+      : matchedEv
+      ? `${matchedEv.evaluatorName || matchedEv.name} (${matchedEv.evaluatorCode})`
+      : selectedEvaluator;
 
     // Optimistically update local state in `courseLedger`:
-    setCourseLedger(prev => prev.map(r => {
-      const isCurrent = (r.Sub_ID || r.subId) === (row.Sub_ID || row.subId);
-      if (isCurrent) {
-        const isUnallotted = !selectedEvaluator || selectedEvaluator === "Unallotted";
-        return {
-          ...r,
-          Allotted_Evaluator: isUnallotted ? "" : selectedEvaluator,
-          evaluatorName: isUnallotted ? null : selectedEvaluator,
-          Status: (r.Status === "Pending" || !r.Status) ? "Allotted" : r.Status
-        };
-      }
-      return r;
-    }));
-
-    // Keep courseEvaluations (sessionCourseEvaluations) in sync as well
-    const matchedEv = evaluators.find((e) =>
-      e.id === selectedEvaluator ||
-      e.evaluatorCode === selectedEvaluator ||
-      `${e.evaluatorName || e.name} (${e.evaluatorCode})` === selectedEvaluator ||
-      (selectedEvaluator && (
-        selectedEvaluator.toLowerCase().includes((e.name || e.evaluatorName || '').toLowerCase()) ||
-        (e.evaluatorCode && selectedEvaluator.toLowerCase().includes(e.evaluatorCode.toLowerCase()))
-      ))
+    setCourseLedger((prev) =>
+      prev.map((r) => {
+        const isCurrent = (r.Sub_ID || r.subId || r.id) === (row.Sub_ID || row.subId || row.id);
+        if (isCurrent) {
+          return {
+            ...r,
+            Allotted_Evaluator: evalDisplayName,
+            allottedEvaluator: evalDisplayName,
+            evaluatorName: matchedEv ? (matchedEv.evaluatorName || matchedEv.name) : isUnallotted ? null : selectedEvaluator,
+            evaluatorCode: matchedEv ? matchedEv.evaluatorCode : null,
+            evaluatorId: matchedEv ? matchedEv.id : isUnallotted ? null : selectedEvaluator,
+            Status: (r.Status === "Pending" || !r.Status || r.Status === "Pending Allotment") && !isUnallotted ? "Allotted" : r.Status,
+          };
+        }
+        return r;
+      })
     );
+
+    // Keep courseEvaluations (sessionCourseEvaluations), Course Packets, and Google Sheets in sync:
     const targetRowId = row.id || row.Sub_ID || row.subId || row.submissionKey;
     if (targetRowId) {
-      allotEvaluatorToEvaluations([targetRowId], matchedEv ? matchedEv.id : null);
+      allotEvaluatorToEvaluations([targetRowId], matchedEv ? matchedEv.id : isUnallotted ? null : selectedEvaluator);
     }
 
-    // Dispatch POST request to Google Apps Script:
-    try {
-      await fetch(SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "ALLOT_EVALUATOR",
-          payload: payload
-        })
-      });
-    } catch (err) {
-      console.warn("[ALLOT_EVALUATOR writeback error]:", err);
-    }
-
-    // Show notification toast: `Allotted ${row.Course_Code} to ${selectedEvaluator}`.
-    const courseCodeDisplay = row.Course_Code || row.courseCode || payload.courseCode;
-    showToast(`Allotted ${courseCodeDisplay} to ${selectedEvaluator}`);
+    const courseCodeDisplay = row.Course_Code || row.courseCode || '';
+    showToast(isUnallotted ? `Unallotted ${courseCodeDisplay}` : `Allotted ${courseCodeDisplay} to ${evalDisplayName}`);
   };
 
   // Lock marks handler (Protected by Coordinator PIN for Desk Role)
@@ -301,8 +290,11 @@ export const CourseEvaluationMaster: React.FC = () => {
           return {
             ...r,
             Allotted_Evaluator: selectedEvaluator,
-            evaluatorName: selectedEvaluator,
-            Status: (r.Status === "Pending" || !r.Status) ? "Allotted" : r.Status
+            allottedEvaluator: selectedEvaluator,
+            evaluatorName: targetEvaluator.evaluatorName || targetEvaluator.name,
+            evaluatorCode: targetEvaluator.evaluatorCode,
+            evaluatorId: targetEvaluator.id,
+            Status: (r.Status === "Pending" || !r.Status || r.Status === "Pending Allotment") ? "Allotted" : r.Status
           };
         }
         return r;
@@ -310,23 +302,6 @@ export const CourseEvaluationMaster: React.FC = () => {
     );
 
     allotEvaluatorToEvaluations(selectedIds, targetEvaluator.id);
-
-    try {
-      await fetch(SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "ALLOT_EVALUATOR",
-          payload: {
-            subIds: selectedIds,
-            evaluator: selectedEvaluator
-          }
-        })
-      });
-    } catch (err) {
-      console.warn("[BATCH ALLOT_EVALUATOR writeback error]:", err);
-    }
 
     setBatchMessage(`Successfully allotted ${selectedIds.length} script(s) to ${selectedEvaluator}.`);
     showToast(`Allotted ${selectedIds.length} script(s) to ${selectedEvaluator}`);
@@ -1000,16 +975,23 @@ export const CourseEvaluationMaster: React.FC = () => {
                   const programmeCode = record.Programme || record.programme || record.programmeCode || "-";
                   const courseCode = record.Course_Code || record.courseCode || record["Course Code"] || "-";
                   const evaluator = record.Allotted_Evaluator || record.allottedEvaluator || (record.evaluatorName && record.evaluatorCode ? `${record.evaluatorName} (${record.evaluatorCode})` : record.evaluatorName) || "Unallotted";
-                  const matchedEvObj = evaluators.find((e) =>
-                    e.id === record.evaluatorId ||
-                    e.evaluatorCode === record.evaluatorCode ||
-                    (record.Allotted_Evaluator && (
-                      record.Allotted_Evaluator === `${e.evaluatorName || e.name} (${e.evaluatorCode})` ||
-                      record.Allotted_Evaluator.includes(e.evaluatorCode) ||
-                      record.Allotted_Evaluator.toLowerCase().includes((e.name || e.evaluatorName || '').toLowerCase())
-                    )) ||
-                    (record.evaluatorName && (e.evaluatorName === record.evaluatorName || e.name === record.evaluatorName))
-                  );
+                  const matchedEvObj = evaluators.find((e) => {
+                    if (record.evaluatorId && (e.id === record.evaluatorId || e.evaluatorCode === record.evaluatorId)) return true;
+                    if (record.evaluatorCode && e.evaluatorCode && String(record.evaluatorCode).toUpperCase() === String(e.evaluatorCode).toUpperCase()) return true;
+                    if (record.evaluatorName) {
+                      const rName = String(record.evaluatorName).trim().toLowerCase();
+                      const eName = String(e.evaluatorName || e.name || '').trim().toLowerCase();
+                      if (rName && eName && (rName === eName || rName.includes(eName) || eName.includes(rName))) return true;
+                    }
+                    if (record.Allotted_Evaluator && record.Allotted_Evaluator !== 'Unallotted') {
+                      const rawAllot = String(record.Allotted_Evaluator).trim().toLowerCase();
+                      const eName = String(e.evaluatorName || e.name || '').trim().toLowerCase();
+                      const eCode = String(e.evaluatorCode || '').trim().toLowerCase();
+                      if (eCode && rawAllot.includes(eCode)) return true;
+                      if (eName && rawAllot.includes(eName)) return true;
+                    }
+                    return false;
+                  });
                   const activeEvaluatorDisplay = matchedEvObj
                     ? `${matchedEvObj.evaluatorName || matchedEvObj.name} (${matchedEvObj.evaluatorCode})`
                     : (evaluator && evaluator !== 'Unallotted' ? evaluator : 'Unallotted');
@@ -1101,6 +1083,15 @@ export const CourseEvaluationMaster: React.FC = () => {
                               }`}
                             >
                               <option value="Unallotted">-- Select Academic Counsellor --</option>
+                              {activeEvaluatorDisplay &&
+                                activeEvaluatorDisplay !== 'Unallotted' &&
+                                !activeEvaluatorsSorted.some(
+                                  (ev) => `${ev.evaluatorName || ev.name} (${ev.evaluatorCode})` === activeEvaluatorDisplay
+                                ) && (
+                                  <option value={activeEvaluatorDisplay}>
+                                    {activeEvaluatorDisplay} (Assigned)
+                                  </option>
+                                )}
                               {activeEvaluatorsSorted.map((ev) => {
                                 const evalName = ev.evaluatorName || ev.name;
                                 const evalDept = ev.department ? ev.department : ev.designation || 'Academic Counsellor';
