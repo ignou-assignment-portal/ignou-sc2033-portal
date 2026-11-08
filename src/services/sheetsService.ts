@@ -1024,7 +1024,12 @@ export async function postUpdateMarks(
 
   const calculatedGrade = gradeParam || getIgnouGrade(numericMarks).grade;
 
-  const payload = {
+  const statusHistory =
+    typeof rowOrParams === 'object' && rowOrParams !== null && rowOrParams.statusHistory
+      ? rowOrParams.statusHistory
+      : (compositeParams as any)?.statusHistory;
+
+  const payload: any = {
     subId,
     enrollmentNo,
     courseCode,
@@ -1032,6 +1037,10 @@ export async function postUpdateMarks(
     grade: calculatedGrade,
     isLocked: isLockAction,
   };
+
+  if (statusHistory) {
+    payload.statusHistory = typeof statusHistory === 'string' ? statusHistory : JSON.stringify(statusHistory);
+  }
 
   // Direct fetch to Apps Script Web App URL with mode: "no-cors"
   try {
@@ -1130,6 +1139,7 @@ export async function postAllotEvaluator(
     enrollmentNo?: string;
     courseCode?: string;
     session?: string;
+    statusHistory?: any;
   }
 ): Promise<ApiResponse> {
   const allottedEvaluatorVal =
@@ -1140,7 +1150,8 @@ export async function postAllotEvaluator(
   const cleanCourse = (evaluator.courseCode || '').toString().trim().toUpperCase();
   const canonicalKey = normalizeAssignmentKey(cleanSubId, cleanEnr, cleanCourse, evaluator.session);
 
-  const payload = {
+  const statusHistory = (evaluator as any)?.statusHistory;
+  const payload: any = {
     subId: cleanSubId,
     assignmentId: canonicalKey || cleanSubId,
     subIds: [cleanSubId, canonicalKey].filter(Boolean),
@@ -1153,6 +1164,10 @@ export async function postAllotEvaluator(
     evaluatorCode: evaluator.evaluatorCode || '',
     Allotted_Evaluator: allottedEvaluatorVal,
   };
+
+  if (statusHistory) {
+    payload.statusHistory = typeof statusHistory === 'string' ? statusHistory : JSON.stringify(statusHistory);
+  }
 
   try {
     console.log(`[EvaluatorSync:API] Dispatching ALLOT_EVALUATOR to Sheets:`, {

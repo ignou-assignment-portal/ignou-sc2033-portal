@@ -328,6 +328,35 @@ export interface CourseEvaluationRecord {
   isPractical?: boolean;
   updatedAt: string;
   remarks?: string;
+
+  // Complete Lifecycle Status Audit History
+  statusHistory?: StatusTransitionEntry[];
+}
+
+export type StatusTransitionAction =
+  | 'INTAKE_REGISTERED'
+  | 'EVALUATOR_ALLOTTED'
+  | 'EVALUATOR_CHANGED'
+  | 'EVALUATOR_UNALLOTTED'
+  | 'MARKS_ENTERED'
+  | 'MARKS_UPDATED'
+  | 'MARKS_LOCKED'
+  | 'MARKS_UNLOCKED';
+
+export interface StatusTransitionEntry {
+  id: string;
+  timestamp: string; // ISO 8601 string
+  action: StatusTransitionAction;
+  previousStatus?: EvaluationStatus | string;
+  newStatus: EvaluationStatus | string;
+  userId: string; // e.g. "coord-sant" or "desk-user"
+  userName: string; // e.g. "Dr. Sant K. Gupta (Coordinator)" or "Desk Official"
+  userRole: UserRole | string; // 'ADMIN' | 'DESK'
+  details: string; // Descriptive human-readable summary
+  evaluatorName?: string | null;
+  evaluatorCode?: string | null;
+  marks?: number | null;
+  grade?: string | null;
 }
 
 export interface EvaluatorSyncLogEntry {

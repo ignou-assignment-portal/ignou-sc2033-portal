@@ -4,6 +4,7 @@ import { CourseEvaluationRecord, Evaluator } from '../types';
 import { calculateIGNOUGrade, formatDate } from '../utils/helpers';
 import { SCRIPT_URL } from '../services/sheetsService';
 import { CoordinatorPinChallengeModal } from './CoordinatorPinChallengeModal';
+import { StatusHistoryModal } from './StatusHistoryModal';
 import {
   Layers,
   Award,
@@ -27,6 +28,7 @@ import {
   ArrowUpDown,
   BookOpen,
   RefreshCw,
+  History,
 } from 'lucide-react';
 
 export const CourseEvaluationMaster: React.FC = () => {
@@ -41,6 +43,7 @@ export const CourseEvaluationMaster: React.FC = () => {
     updateEvaluationMarks,
     toggleLockMarks,
     batchLockMarks,
+    getStatusHistoryForEvaluation,
     isAdmin,
     currentRole,
     settings,
@@ -51,6 +54,9 @@ export const CourseEvaluationMaster: React.FC = () => {
     showToast,
     canPerformOperation,
   } = useApp();
+
+  // Status History Modal State
+  const [historyTargetRecord, setHistoryTargetRecord] = useState<CourseEvaluationRecord | null>(null);
 
   // Coordinator PIN Challenge Modal State for RBAC
   const [pinChallenge, setPinChallenge] = useState<{
@@ -872,20 +878,31 @@ export const CourseEvaluationMaster: React.FC = () => {
                 <div className="pt-2 border-t border-zinc-100 flex items-center justify-between">
                   <div>
                     {isLocked ? (
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-purple-900">
+                      <button
+                        onClick={() => setHistoryTargetRecord(record)}
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition cursor-pointer hover:ring-2 hover:ring-purple-300"
+                        title="Click to view complete lifecycle Status History"
+                      >
                         <Stamp className="w-3.5 h-3.5 text-purple-700" />
                         <span>LOCKED & SEALED</span>
-                      </div>
+                        <History className="w-3 h-3 text-purple-500 ml-0.5" />
+                      </button>
                     ) : (
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
-                        status === 'Evaluated'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : status === 'Allotted'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {status}
-                      </span>
+                      <button
+                        onClick={() => setHistoryTargetRecord(record)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer hover:ring-2 hover:ring-indigo-300 ${
+                          status === 'Evaluated'
+                            ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200/80 border-emerald-200'
+                            : status === 'Allotted'
+                            ? 'bg-blue-100 text-blue-800 hover:bg-blue-200/80 border-blue-200'
+                            : 'bg-amber-100 text-amber-800 hover:bg-amber-200/80 border-amber-200'
+                        }`}
+                        title="Click to view complete lifecycle Status History"
+                      >
+                        <Clock className="w-3 h-3" />
+                        <span>{status}</span>
+                        <History className="w-3 h-3 text-zinc-500 opacity-70 ml-0.5" />
+                      </button>
                     )}
                   </div>
 
@@ -1160,10 +1177,17 @@ export const CourseEvaluationMaster: React.FC = () => {
                       {/* Status & Official Verification Seal */}
                       <td className="p-3.5">
                         {isLocked ? (
-                          <div className="bg-purple-50 border border-purple-200 p-2 rounded-xl text-[11px] space-y-0.5">
-                            <div className="flex items-center gap-1.5 text-purple-900 font-bold tracking-tight">
-                              <Stamp className="w-3.5 h-3.5 text-purple-700" />
-                              <span>LOCKED & VERIFIED</span>
+                          <button
+                            onClick={() => setHistoryTargetRecord(record)}
+                            className="w-full text-left bg-purple-50 hover:bg-purple-100/90 border border-purple-200 p-2 rounded-xl text-[11px] space-y-0.5 transition cursor-pointer hover:ring-2 hover:ring-purple-300 group"
+                            title="Click to view complete lifecycle Status History"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-purple-900 font-bold tracking-tight">
+                                <Stamp className="w-3.5 h-3.5 text-purple-700" />
+                                <span>LOCKED & VERIFIED</span>
+                              </div>
+                              <History className="w-3 h-3 text-purple-400 group-hover:text-purple-700 transition" />
                             </div>
                             <div className="text-[10px] text-purple-800 font-mono font-medium">
                               By:{settings.coordinatorName || 'Dr. Sant K. Gupta'} (Coordinator)
@@ -1171,20 +1195,26 @@ export const CourseEvaluationMaster: React.FC = () => {
                             <div className="text-[10px] text-purple-600 font-mono">
                               {formatDate(record.lockedAt || new Date().toISOString())}
                             </div>
-                          </div>
+                          </button>
                         ) : (
                           <div>
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
+                            <button
+                              onClick={() => setHistoryTargetRecord(record)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer hover:ring-2 hover:ring-indigo-300 group ${
                                 record.status === 'Evaluated' || numericMarks !== null
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200/80'
                                   : record.status === 'Allotted' || (evaluator && evaluator !== 'Unallotted')
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-amber-100 text-amber-800'
+                                  ? 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200/80'
+                                  : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200/80'
                               }`}
+                              title="Click to view complete lifecycle Status History"
                             >
-                              {record.status || (numericMarks !== null ? 'Evaluated' : evaluator && evaluator !== 'Unallotted' ? 'Allotted' : 'Pending')}
-                            </span>
+                              <Clock className="w-3 h-3 text-current opacity-80" />
+                              <span>
+                                {record.status || (numericMarks !== null ? 'Evaluated' : evaluator && evaluator !== 'Unallotted' ? 'Allotted' : 'Pending')}
+                              </span>
+                              <History className="w-2.5 h-2.5 text-current opacity-60 group-hover:opacity-100 ml-0.5" />
+                            </button>
                             <div className="text-[10px] text-zinc-400 mt-1">
                               {numericMarks !== null ? 'Ready to Lock' : 'Pending Entry'}
                             </div>
@@ -1381,6 +1411,14 @@ export const CourseEvaluationMaster: React.FC = () => {
         onSuccess={pinChallenge.action}
         actionTitle={pinChallenge.title}
         actionDescription={pinChallenge.description}
+      />
+
+      {/* Script Status History Audit Trail Modal */}
+      <StatusHistoryModal
+        isOpen={!!historyTargetRecord}
+        onClose={() => setHistoryTargetRecord(null)}
+        record={historyTargetRecord}
+        history={historyTargetRecord ? getStatusHistoryForEvaluation(historyTargetRecord.id) : []}
       />
     </div>
   );
