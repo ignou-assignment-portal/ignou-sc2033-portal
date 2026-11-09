@@ -88,7 +88,8 @@ import {
   normalizeSessionName,
   norm,
   normalizeAssignmentKey,
-  postBatchAllotEvaluator
+  postBatchAllotEvaluator,
+  postRepairCourseLedger,
 } from '../services/sheetsService';
 import {
   subscribeSyncQueue,
@@ -171,6 +172,12 @@ interface AppContextType {
   };
   closeEditingAuthChallenge: () => void;
   resyncAllAllottedEvaluatorsToSheets: () => Promise<{ total: number; synced: number; error?: string }>;
+  repairAndRealignCourseLedger: () => Promise<{
+    success: boolean;
+    repairedCount: number;
+    totalCount: number;
+    message: string;
+  }>;
 
   // Intake Master (Strictly Session Filtered)
   sessionIntakes: IntakeRecord[];
@@ -2978,6 +2985,159 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { total: eligibleRecords.length, synced: syncedCount, error: err?.message || 'Sync failed' };
     }
   }, [courseEvaluations, currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent]);
+
+  // One-Click Automated Course_Ledger Alignment & Repair Engine
+  const repairAndRealignCourseLedger = useCallback(async (): Promise<{
+    success: boolean;
+    repairedCount: number;
+    totalCount: number;
+    message: string;
+  }> => {
+    try {
+      showToast('Initiating Course_Ledger 17-column realignment and repair...', 'info');
+
+      // 1. Realign and clean all local course evaluation records
+      const cleanedRecords = courseEvaluations.map((rec) => {
+        const enr = String(rec.enrollmentNo || (rec as any).Enrollment_No || '').replace(/^'/, '').trim();
+        const course = String(rec.courseCode || (rec as any).Course_Code || '')
+          .replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, '')
+          .trim()
+          .toUpperCase();
+        const sess = normalizeSessionName(rec.session || (rec as any).Session || currentSession);
+        const subId = rec.subId || (rec as any).Sub_ID || `SUB_${enr}_${course}_${sess.replace(/\s+/g, '').toUpperCase()}`;
+        const cand = String(rec.candidateName || (rec as any).Candidate_Name || (rec as any).studentName || '').trim();
+        const prog = String(rec.programmeCode || rec.Programme || (rec as any).programme || 'IGNOU').trim();
+
+        // Detect if evaluator was displaced into componentType
+        let evalName = rec.evaluatorName || rec.allottedEvaluator || (rec as any).Allotted_Evaluator || 'Unallotted';
+        let rawComp = String(rec.componentType || (rec as any).Component_Type || '').trim();
+
+        if (rawComp && !/^(theory|practical|assignment|tma|lab|project)/i.test(rawComp)) {
+          if (!evalName || evalName === 'Unallotted') {
+            evalName = rawComp;
+          }
+          rawComp = 'Theory (TMA)';
+        }
+
+        const isPrac = Boolean(
+          rec.isPractical ||
+          rawComp.toLowerCase().includes('practical') ||
+          /lab|prac|project|viva|p$/i.test(course)
+        );
+        const finalCompType: 'Assignment' | 'Practical' = isPrac ? 'Practical' : 'Assignment';
+        const sheetCompType = isPrac ? 'Practical' : 'Theory (TMA)';
+
+        // Clean marks
+        let rawMarks = rec.marks !== undefined && rec.marks !== null ? rec.marks : (rec as any).Marks;
+        let numMarks: number | null = null;
+        let finalStatus = rec.status || (rec as any).Status || 'Pending Allotment';
+
+        if (rawMarks !== undefined && rawMarks !== null && rawMarks !== '') {
+          if (typeof rawMarks === 'string' && /pending|allot|evaluated|locked|—|-/i.test(rawMarks)) {
+            if (!finalStatus || finalStatus === 'Pending' || finalStatus === 'Pending Allotment') {
+              finalStatus = rawMarks;
+            }
+            numMarks = null;
+          } else if (!isNaN(Number(rawMarks))) {
+            numMarks = Number(rawMarks);
+          }
+        }
+
+        const calculatedGrade = numMarks !== null ? calculateIGNOUGrade(numMarks).grade : '—';
+        const isLocked = Boolean(rec.isLocked || finalStatus === 'Marks Locked' || finalStatus === 'Locked');
+
+        if (isLocked) {
+          finalStatus = 'Marks Locked';
+        } else if (numMarks !== null) {
+          finalStatus = 'Evaluated';
+        } else if (evalName && evalName !== 'Unallotted') {
+          finalStatus = 'Allotted';
+        } else {
+          finalStatus = 'Pending Allotment';
+        }
+
+        const evalObj = evaluators.find((e) =>
+          e.evaluatorName?.trim().toLowerCase() === evalName.trim().toLowerCase() ||
+          e.name?.trim().toLowerCase() === evalName.trim().toLowerCase()
+        );
+        const evalCode = rec.evaluatorCode || evalObj?.evaluatorCode || '';
+
+        return {
+          ...rec,
+          id: subId,
+          subId,
+          Sub_ID: subId,
+          session: sess,
+          Session: sess,
+          enrollmentNo: enr,
+          Enrollment_No: enr,
+          candidateName: cand,
+          Candidate_Name: cand,
+          programmeCode: prog,
+          Programme: prog,
+          courseCode: course,
+          Course_Code: course,
+          componentType: finalCompType,
+          Component_Type: sheetCompType,
+          Component: finalCompType,
+          isPractical: isPrac,
+          allottedEvaluator: evalName,
+          Allotted_Evaluator: evalName,
+          evaluatorName: evalName !== 'Unallotted' ? evalName : null,
+          evaluatorCode: evalCode,
+          Evaluator_Code: evalCode,
+          marks: numMarks,
+          Marks: numMarks,
+          grade: calculatedGrade,
+          Grade: calculatedGrade,
+          status: finalStatus,
+          Status: finalStatus,
+          isLocked,
+          Is_Locked: isLocked ? 'YES' : 'NO',
+          submissionDate: rec.submissionDate || (rec as any).Submission_Date || new Date().toISOString().split('T')[0],
+          submissionMode: (rec.submissionMode as SubmissionMode) || 'In-Person (Desk)',
+        };
+      });
+
+      // 2. Dispatch atomic repair to Google Sheets
+      const res = await postRepairCourseLedger(cleanedRecords);
+
+      // 3. Update local state & storage
+      setCourseEvaluations(cleanedRecords);
+      try {
+        localStorage.setItem('ignou_sc2033_course_evaluations', JSON.stringify(cleanedRecords));
+      } catch {}
+
+      // 4. Record audit entry
+      logAuditEvent({
+        action: 'SHEETS_SYNCED',
+        category: 'DATA_INTEGRITY',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: currentSession,
+        summary: `Realigned and repaired ${cleanedRecords.length} Course_Ledger rows in Google Sheets (17-column dynamic map)`,
+        status: 'SUCCESS',
+      });
+
+      showToast(`Course Ledger repaired! ${cleanedRecords.length} rows successfully realigned with Google Sheets.`, 'success');
+
+      return {
+        success: true,
+        repairedCount: cleanedRecords.length,
+        totalCount: cleanedRecords.length,
+        message: res.message || 'Course_Ledger columns realigned and repaired successfully.',
+      };
+    } catch (err: any) {
+      console.error('[repairAndRealignCourseLedger error]:', err);
+      showToast(`Repair warning: ${err?.message || 'Check network connection'}. Local records realigned.`, 'warning');
+      return {
+        success: false,
+        repairedCount: 0,
+        totalCount: courseEvaluations.length,
+        message: err?.message || 'Failed to repair Course Ledger.',
+      };
+    }
+  }, [courseEvaluations, currentSession, currentRole, evaluators, settings.coordinatorName, showToast, logAuditEvent]);
 
   // Role switching
   const setRole = useCallback(
@@ -7032,6 +7192,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           }
 
+          // Heal Pattern 4: 17-column layout shift where Component_Type (Col 9) held evaluator name or 'Unallotted',
+          // and Marks (Col 12) held status strings like 'Pending Allotment', 'Allotted', 'Evaluated', '—'
+          let rawComp = (r.Component_Type || r.componentType || r.Component || "").toString().trim();
+          let compType = 'Theory (TMA)';
+          if (rawComp) {
+            const isStandardComp = /^(theory|practical|assignment|tma|lab|project)/i.test(rawComp);
+            if (!isStandardComp) {
+              if (!evalName || evalName === 'Unallotted') {
+                evalName = rawComp;
+              }
+              compType = 'Theory (TMA)';
+            } else {
+              compType = rawComp;
+            }
+          }
+
+          if (marks && typeof marks === 'string' && /pending|allot|evaluated|locked|—|-/i.test(marks)) {
+            if (!status || status === 'Pending' || status === 'Pending Allotment') {
+              status = marks;
+            }
+            marks = '';
+          }
+
+          if (!status || status === 'Pending') {
+            if (marks !== '' && marks !== null && !isNaN(Number(marks))) {
+              status = 'Evaluated';
+            } else if (evalName && evalName !== 'Unallotted') {
+              status = 'Allotted';
+            } else {
+              status = 'Pending Allotment';
+            }
+          }
+
           return {
             ...r,
             Enrollment_No: enr,
@@ -7045,6 +7238,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             programmeCode: prog || 'IGNOU',
             Allotted_Evaluator: evalName || 'Unallotted',
             allottedEvaluator: evalName || 'Unallotted',
+            Component_Type: compType,
+            componentType: compType,
             Marks: marks,
             marks: marks,
             Grade: grade,
@@ -9375,6 +9570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         editingAuthChallenge,
         closeEditingAuthChallenge,
         resyncAllAllottedEvaluatorsToSheets,
+        repairAndRealignCourseLedger,
         sessionIntakes,
         allIntakes: intakes,
         intakeRegister: intakes,

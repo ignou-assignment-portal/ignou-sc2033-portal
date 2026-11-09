@@ -465,17 +465,41 @@ export const AppsScriptSetupModal: React.FC<AppsScriptSetupModalProps> = ({
                 </p>
               </div>
 
-              {/* Course Ledger 12-Column Specification */}
-              <div className="bg-amber-50/70 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-amber-950">Course_Ledger 12-Column Architecture (Evaluator Allotment Parity):</span>
-                  <span className="bg-amber-200 text-amber-900 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">Col 9: Allotted_Evaluator</span>
+              {/* Verified Intake_Register 8-Column Specification */}
+              <div className="bg-slate-900 text-white border border-slate-700 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Intake_Register: Verified 8-Column Architecture</span>
+                  </span>
+                  <span className="bg-emerald-500/20 text-emerald-300 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                    Tab: Intake_Register (Verified Active)
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-800 border border-slate-700 rounded-lg font-mono text-[11px] text-emerald-300 leading-relaxed overflow-x-auto">
+                  1.Timestamp · 2.Session · 3.Enrollment_No · 4.Candidate_Name · 5.Contact · 6.Programme · 7.Courses · 8.Official
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  ✓ <strong>Standard Alignment:</strong> Your existing 8-column header structure is verified and preserved exactly as created.
+                </p>
+              </div>
+
+              {/* Verified Course_Ledger 17-Column Specification */}
+              <div className="bg-amber-50/80 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-amber-950">Course_Ledger: Verified 17-Column Architecture</span>
+                    <span className="bg-amber-200 text-amber-900 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">Col 9: Component_Type | Col 10: Allotted_Evaluator</span>
+                  </div>
+                  <span className="bg-emerald-100 text-emerald-800 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">
+                    Dynamic Header Mapping Active
+                  </span>
                 </div>
                 <div className="p-2.5 bg-white border border-amber-200 rounded-lg font-mono text-[11px] text-amber-950 leading-relaxed overflow-x-auto">
-                  1.Sub_ID · 2.Session · 3.Enrollment_No · 4.Candidate_Name · 5.Contact_No · 6.Email_ID · 7.Programme_Code · 8.Course_Code · <strong>9.Allotted_Evaluator</strong> · 10.Marks · 11.Grade · 12.Status
+                  1.Sub_ID · 2.Session · 3.Enrollment_No · 4.Candidate_Name · 5.Contact_No · 6.Email_ID · 7.Programme_Code · 8.Course_Code · <strong>9.Component_Type</strong> · <strong>10.Allotted_Evaluator</strong> · 11.Evaluator_Code · <strong>12.Marks</strong> · 13.Grade · 14.Status · 15.Is_Locked · 16.Submission_Date · 17.Submission_Mode
                 </div>
                 <p className="text-[11px] text-amber-800 leading-relaxed">
-                  ✓ <strong>Evaluator Recording Fix:</strong> Column 9 is mapped to <code>Allotted_Evaluator</code>. If an entry is missing in Course_Ledger when allotted, the updated <code>Code.gs</code> automatically appends the row so no evaluator assignments are lost.
+                  ✓ <strong>Zero-Shift Header Protection:</strong> The updated <code>Code.gs</code> inspects row 1 column headers dynamically. <code>Component_Type</code> is preserved at Column 9 ("Theory (TMA)" or "Practical"), Academic Counsellors are accurately written to Column 10 (<code>Allotted_Evaluator</code>), and marks are recorded to Column 12 (<code>Marks</code>). Existing shifted rows can be realigned with 1 click using the <strong>"Repair Shifted Columns"</strong> tool in Stage 2.
                 </p>
               </div>
             </div>

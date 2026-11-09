@@ -29,6 +29,10 @@ import {
   BookOpen,
   RefreshCw,
   History,
+  Wrench,
+  AlertTriangle,
+  Check,
+  X,
 } from 'lucide-react';
 
 export const CourseEvaluationMaster: React.FC = () => {
@@ -55,9 +59,17 @@ export const CourseEvaluationMaster: React.FC = () => {
     canPerformOperation,
     requireEditingAuth,
     resyncAllAllottedEvaluatorsToSheets,
+    repairAndRealignCourseLedger,
   } = useApp();
 
   const [isResyncingLedger, setIsResyncingLedger] = useState(false);
+  const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
+  const [isRepairingLedger, setIsRepairingLedger] = useState(false);
+  const [repairResult, setRepairResult] = useState<{
+    repairedCount: number;
+    totalCount: number;
+    message: string;
+  } | null>(null);
 
   // Status History Modal State
   const [historyTargetRecord, setHistoryTargetRecord] = useState<CourseEvaluationRecord | null>(null);
@@ -498,6 +510,20 @@ export const CourseEvaluationMaster: React.FC = () => {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isResyncingLedger ? 'animate-spin text-amber-700' : 'text-amber-800'}`} />
               <span>{isResyncingLedger ? 'Repairing Ledger...' : 'Repair Ledger Parity'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setRepairResult(null);
+                setIsRepairModalOpen(true);
+              }}
+              disabled={isRepairingLedger}
+              id="repair-columns-modal-btn"
+              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
+              title="Verify and repair shifted columns in Google Sheets Course_Ledger (17-column layout alignment)"
+            >
+              <Wrench className={`w-3.5 h-3.5 ${isRepairingLedger ? 'animate-spin text-emerald-700' : 'text-emerald-800'}`} />
+              <span>{isRepairingLedger ? 'Repairing Columns...' : 'Repair Shifted Columns'}</span>
             </button>
 
             <button
@@ -1447,6 +1473,155 @@ export const CourseEvaluationMaster: React.FC = () => {
         record={historyTargetRecord}
         history={historyTargetRecord ? getStatusHistoryForEvaluation(historyTargetRecord.id) : []}
       />
+
+      {/* Course_Ledger Column Alignment & Repair Modal */}
+      {isRepairModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between text-white border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400 border border-emerald-500/30">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">Course_Ledger Column Alignment & Parity Repair</h3>
+                  <p className="text-xs text-slate-400">Realign shifted columns to match your verified 17-column layout in Google Sheets</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsRepairModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto text-xs text-slate-700">
+              {/* Sheet Verification Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between font-bold text-emerald-950 text-xs">
+                    <span>Intake_Register Layout</span>
+                    <span className="text-[10px] font-mono bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded">8 Columns</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    Timestamp · Session · Enrollment_No · Candidate_Name · Contact · Programme · Courses · Official
+                  </p>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 pt-1">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Verified & Aligned (No changes needed)</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between font-bold text-amber-950 text-xs">
+                    <span>Course_Ledger Layout</span>
+                    <span className="text-[10px] font-mono bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">17 Columns</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-tight">
+                    Sub_ID · Session · Enrollment_No · Candidate_Name · Contact_No · Email_ID · Programme_Code · Course_Code · Component_Type · Allotted_Evaluator · Evaluator_Code · Marks · Grade · Status · Is_Locked · Submission_Date · Submission_Mode
+                  </p>
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-amber-800 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Shift Detected in Col 9 & 12 (Ready for Repair)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Diagnosis Details */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-indigo-600" />
+                  <span>Why did Course_Ledger columns get shifted?</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Your Google Sheet has <strong>17 columns</strong> with <code>Component_Type</code> at Column 9 and <code>Allotted_Evaluator</code> at Column 10. Previous script versions wrote a 12-item array without <code>Component_Type</code> or <code>Evaluator_Code</code>, causing values to shift left:
+                </p>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1 font-mono text-[10px] text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-600 font-bold">Col 9 (Component_Type):</span>
+                    <span>Received evaluator names or "Unallotted"</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-600 font-bold">Col 10 (Allotted_Evaluator):</span>
+                    <span>Left blank</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-600 font-bold">Col 12 (Marks):</span>
+                    <span>Received status text like "Pending Allotment" or "Allotted"</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* What This Repair Does */}
+              <div className="p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl space-y-2">
+                <div className="font-bold text-indigo-950 text-xs">
+                  Automated Repair Actions Performed:
+                </div>
+                <ul className="space-y-1 text-[11px] text-indigo-900 list-disc list-inside">
+                  <li>Restores <code>Component_Type</code> (Col 9) to <strong>"Theory (TMA)"</strong> or <strong>"Practical"</strong>.</li>
+                  <li>Moves counsellors into <code>Allotted_Evaluator</code> (Col 10) and sets <code>Evaluator_Code</code> (Col 11).</li>
+                  <li>Cleans non-numeric status text from <code>Marks</code> (Col 12), preserving valid marks.</li>
+                  <li>Calculates IGNOU letter grades (Col 13) and sets <code>Status</code> (Col 14) to "Allotted", "Evaluated", or "Marks Locked".</li>
+                  <li>Writes <code>Is_Locked</code> (Col 15), <code>Submission_Date</code> (Col 16), and <code>Submission_Mode</code> (Col 17).</li>
+                  <li>Commits changes both to local state and directly to your live Google Sheets tab in an atomic batch.</li>
+                </ul>
+              </div>
+
+              {/* Success summary if completed */}
+              {repairResult && (
+                <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-start gap-2.5 text-emerald-950">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-xs">Repair Completed Successfully!</div>
+                    <p className="text-[11px] text-emerald-800">{repairResult.message}</p>
+                    <div className="text-[10px] font-mono text-emerald-700">
+                      Total records processed: {repairResult.repairedCount} / {repairResult.totalCount}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="bg-slate-50 px-6 py-4 flex items-center justify-between border-t border-slate-200">
+              <span className="text-[11px] text-slate-500 font-mono">
+                {courseLedger.length} records in active Course Ledger
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRepairModalOpen(false)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  {repairResult ? 'Close' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    requireEditingAuth('Repair & Realign Course_Ledger Columns', async () => {
+                      setIsRepairingLedger(true);
+                      try {
+                        const res = await repairAndRealignCourseLedger();
+                        setRepairResult(res);
+                      } finally {
+                        setIsRepairingLedger(false);
+                      }
+                    }, 'Executing automated Course_Ledger column realignment requires operational PIN authorization.');
+                  }}
+                  disabled={isRepairingLedger}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRepairingLedger ? 'animate-spin' : ''}`} />
+                  <span>{isRepairingLedger ? 'Executing Repair...' : 'Execute One-Click Column Repair'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

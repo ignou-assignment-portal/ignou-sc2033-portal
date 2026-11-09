@@ -931,6 +931,7 @@ app.post("/api/sheets", async (req, res) => {
       },
     };
 
+    const timeoutMs = action === "REPAIR_COURSE_LEDGER" || action === "BATCH_ALLOT_EVALUATOR" ? 35000 : 18000;
     const remoteResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {
@@ -938,7 +939,7 @@ app.post("/api/sheets", async (req, res) => {
       },
       body: JSON.stringify(outgoingBody),
       redirect: "follow",
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     console.log(`[Proxy POST] Apps Script response status: ${remoteResponse.status}`);

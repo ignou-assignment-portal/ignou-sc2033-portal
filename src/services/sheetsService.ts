@@ -1838,10 +1838,10 @@ function setupDatabaseFromJan2024() {
   ];
   getOrCreateStyledSheet(ss, "Intake_Register", intakeHeaders, "#0f172a", "#ffffff");
 
-  // 4. Create Course Ledger (Amber / Bronze)
+  // 4. Create Course Ledger (Amber / Bronze) - 17 Columns Standard
   var ledgerHeaders = [
     "Sub_ID", "Session", "Enrollment_No", "Candidate_Name", "Contact_No", "Email_ID",
-    "Programme_Code", "Course_Code", "Allotted_Evaluator", "Marks", "Grade", "Status"
+    "Programme_Code", "Course_Code", "Component_Type", "Allotted_Evaluator", "Evaluator_Code", "Marks", "Grade", "Status", "Is_Locked", "Submission_Date", "Submission_Mode"
   ];
   getOrCreateStyledSheet(ss, "Course_Ledger", ledgerHeaders, "#78350f", "#ffffff");
 
@@ -2072,18 +2072,42 @@ function doPost(e) {
       timestamp, session, "'" + enrollment, candidate, contact, prog, coursesStr, official
     ]);
 
-    // Unpack courses into Course_Ledger
+    // Unpack courses into Course_Ledger using dynamic header mapping
     var ledgerSheet = getOrCreateStyledSheet(ss, "Course_Ledger", [
       "Sub_ID", "Session", "Enrollment_No", "Candidate_Name", "Contact_No", "Email_ID",
-      "Programme_Code", "Course_Code", "Allotted_Evaluator", "Marks", "Grade", "Status"
+      "Programme_Code", "Course_Code", "Component_Type", "Allotted_Evaluator", "Evaluator_Code", "Marks", "Grade", "Status", "Is_Locked", "Submission_Date", "Submission_Mode"
     ], "#78350f", "#ffffff");
+
+    var ledgerMap = getHeaderMap(ledgerSheet);
 
     for (var k = 0; k < cleanCourses.length; k++) {
       var cCode = cleanCourses[k];
-      var subId = "SUB_" + enrollment + "_" + cCode + "_" + session.replace(/\\s+/g, "").toUpperCase();
-      ledgerSheet.appendRow([
-        subId, session, "'" + enrollment, candidate, contact, "", prog, cCode, "Unallotted", "", "—", "Pending Allotment"
-      ]);
+      var subId = "SUB_" + enrollment + "_" + cCode + "_" + session.replace(/\s+/g, "").toUpperCase();
+      var isPrac = /lab|prac|project|viva|p$/i.test(cCode) || ((prog === 'MCA' || prog === 'BCA' || prog === 'BLIS' || prog === 'MLIS') && /l|p/i.test(cCode));
+      var compType = isPrac ? "Practical" : "Theory (TMA)";
+
+      var rowItem = {
+        subId: subId,
+        session: session,
+        enrollmentNo: enrollment,
+        candidateName: candidate,
+        contact: contact,
+        email: "",
+        programmeCode: prog,
+        courseCode: cCode,
+        componentType: compType,
+        allottedEvaluator: "Unallotted",
+        evaluatorCode: "",
+        marks: "",
+        grade: "—",
+        status: "Pending Allotment",
+        isLocked: false,
+        submissionDate: timestamp,
+        submissionMode: "Offline Desk"
+      };
+
+      var rowArray = buildCourseLedgerRow(ledgerMap, rowItem);
+      ledgerSheet.appendRow(rowArray);
     }
 
     return ContentService.createTextOutput(JSON.stringify({
@@ -2102,12 +2126,7 @@ function doPost(e) {
     if (ledgerSheet) {
       var data = ledgerSheet.getDataRange().getValues();
       if (data.length > 1) {
-        var headers = data[0];
-        var colMap = {};
-        for (var c = 0; c < headers.length; c++) {
-          var hClean = String(headers[c] || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-          colMap[hClean] = c + 1; // 1-indexed for getRange
-        }
+        var colMap = getHeaderMap(ledgerSheet);
 
         var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
         var sessCol = colMap["session"] || 2;
@@ -2117,11 +2136,13 @@ function doPost(e) {
         var emailCol = colMap["emailid"] || colMap["email"] || 6;
         var progCol = colMap["programmecode"] || colMap["programme"] || 7;
         var courseCol = colMap["coursecode"] || colMap["course"] || 8;
-        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || colMap["counsellor"] || colMap["evaluatorname"] || 9;
-        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 0;
-        var marksCol = colMap["marks"] || 10;
-        var gradeCol = colMap["grade"] || 11;
-        var statusCol = colMap["status"] || 12;
+        var compCol = colMap["componenttype"] || colMap["component"] || 0;
+        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || colMap["counsellor"] || colMap["evaluatorname"] || (compCol > 0 ? 10 : 9);
+        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || (compCol > 0 ? 11 : 0);
+        var marksCol = colMap["marks"] || (compCol > 0 ? 12 : 10);
+        var gradeCol = colMap["grade"] || (compCol > 0 ? 13 : 11);
+        var statusCol = colMap["status"] || (compCol > 0 ? 14 : 12);
+        var lockCol = colMap["islocked"] || colMap["locked"] || (compCol > 0 ? 15 : 0);
 
         var itemsToProcess = [];
         if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
@@ -2172,9 +2193,10 @@ function doPost(e) {
             if (isSubIdMatch || isEnrCourseMatch) {
               matched = true;
               if (action === "UPDATE_MARKS") {
-                if (marksCol > 0) ledgerSheet.getRange(i + 1, marksCol).setValue(item.marks !== undefined && item.marks !== null ? item.marks : "");
+                if (marksCol > 0) ledgerSheet.getRange(i + 1, marksCol).setValue(item.marks !== undefined && item.marks !== null && item.marks !== "" ? item.marks : "");
                 if (gradeCol > 0) ledgerSheet.getRange(i + 1, gradeCol).setValue(item.grade || "");
                 if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue(item.isLocked ? "Marks Locked" : "Evaluated");
+                if (lockCol > 0) ledgerSheet.getRange(i + 1, lockCol).setValue(item.isLocked ? "YES" : "NO");
               } else {
                 var allotDisplay = evalVal || (evalCodeVal ? ("Evaluator (" + evalCodeVal + ")") : "Unallotted");
                 if (evalCol > 0) ledgerSheet.getRange(i + 1, evalCol).setValue(allotDisplay);
@@ -2186,24 +2208,29 @@ function doPost(e) {
             }
           }
 
-          // Auto-insert fallback: If script row is not in Course_Ledger, automatically append it
+          // Auto-insert fallback: If script row is not in Course_Ledger, dynamically append it matching exact headers
           if (!matched && (targetEnr || normTargetSubId)) {
             var finalSubId = targetSubId || ("SUB_" + targetEnr + "_" + targetCourse + "_" + (item.session || "JUL2026").replace(/\s+/g, "").toUpperCase());
             var autoStatus = evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment";
-            var appendRowVals = [
-              finalSubId,
-              item.session || "July 2026",
-              "'" + targetEnr,
-              item.candidateName || item.studentName || "",
-              item.contact || item.studentPhone || "",
-              item.email || item.studentEmail || "",
-              item.programmeCode || item.programme || "IGNOU",
-              targetCourse || item.courseCode || "",
-              evalVal || "Unallotted",
-              item.marks !== undefined && item.marks !== null ? item.marks : "",
-              item.grade || "—",
-              item.status || autoStatus
-            ];
+            var appendRowVals = buildCourseLedgerRow(colMap, {
+              subId: finalSubId,
+              session: item.session || "July 2026",
+              enrollmentNo: targetEnr,
+              candidateName: item.candidateName || item.studentName || "",
+              contact: item.contact || item.studentPhone || "",
+              email: item.email || item.studentEmail || "",
+              programmeCode: item.programmeCode || item.programme || "IGNOU",
+              courseCode: targetCourse || item.courseCode || "",
+              componentType: item.componentType || "Theory (TMA)",
+              allottedEvaluator: evalVal || "Unallotted",
+              evaluatorCode: evalCodeVal || "",
+              marks: item.marks !== undefined && item.marks !== null ? item.marks : "",
+              grade: item.grade || "—",
+              status: item.status || autoStatus,
+              isLocked: Boolean(item.isLocked),
+              submissionDate: item.submissionDate || "",
+              submissionMode: item.submissionMode || "Offline Desk"
+            });
             ledgerSheet.appendRow(appendRowVals);
             updatedCount++;
           }
@@ -2215,6 +2242,106 @@ function doPost(e) {
       action: action,
       updatedCount: updatedCount,
       timestamp: new Date().toISOString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 5. Automated Course_Ledger Alignment & Repair (One-Click Dynamic Fix)
+  if (action === "REPAIR_COURSE_LEDGER") {
+    var ledgerSheet = findSheetByAliases(ss, ["Course_Ledger", "courseLedger", "2_Course_Evaluation_Master"]);
+    if (!ledgerSheet) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Course_Ledger sheet not found" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    var totalRows = ledgerSheet.getLastRow();
+    if (totalRows <= 1) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", repairedCount: 0, message: "Course_Ledger is empty" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var headerMap = getHeaderMap(ledgerSheet);
+    var maxCols = ledgerSheet.getLastColumn();
+    var clientRecords = payload.records || [];
+    var clientRecordMap = {};
+    for (var cr = 0; cr < clientRecords.length; cr++) {
+      var rRec = clientRecords[cr];
+      var rKey = String(rRec.subId || rRec.id || "").trim().toUpperCase();
+      if (rKey) clientRecordMap[rKey] = rRec;
+      var altKey = String(rRec.enrollmentNo || "").replace(/^'/, '').trim() + "_" + String(rRec.courseCode || "").trim().toUpperCase();
+      if (altKey) clientRecordMap[altKey] = rRec;
+    }
+
+    var compCol = headerMap["componenttype"] || headerMap["component"] || 0;
+    var evalCol = headerMap["allottedevaluator"] || headerMap["evaluator"] || (compCol > 0 ? 10 : 9);
+    var evalCodeCol = headerMap["evaluatorcode"] || headerMap["evalcode"] || (compCol > 0 ? 11 : 0);
+    var marksCol = headerMap["marks"] || (compCol > 0 ? 12 : 10);
+    var gradeCol = headerMap["grade"] || (compCol > 0 ? 13 : 11);
+    var statusCol = headerMap["status"] || (compCol > 0 ? 14 : 12);
+    var lockCol = headerMap["islocked"] || headerMap["locked"] || (compCol > 0 ? 15 : 0);
+    var dateCol = headerMap["submissiondate"] || headerMap["date"] || (compCol > 0 ? 16 : 0);
+    var modeCol = headerMap["submissionmode"] || headerMap["mode"] || (compCol > 0 ? 17 : 0);
+
+    var allRowsRange = ledgerSheet.getRange(2, 1, totalRows - 1, maxCols);
+    var rowsValues = allRowsRange.getValues();
+    var repairedCount = 0;
+
+    for (var i = 0; i < rowsValues.length; i++) {
+      var row = rowsValues[i];
+      var rowSubId = String(row[0] || "").trim().toUpperCase();
+      var rowEnr = String(row[2] || "").replace(/^'/, '').trim();
+      var rowCourse = String(row[7] || "").trim().toUpperCase();
+      var rowAltKey = rowEnr + "_" + rowCourse;
+
+      var clientRec = clientRecordMap[rowSubId] || clientRecordMap[rowAltKey];
+
+      if (clientRec) {
+        if (compCol > 0) row[compCol - 1] = clientRec.componentType || "Theory (TMA)";
+        if (evalCol > 0) row[evalCol - 1] = clientRec.allottedEvaluator || clientRec.evaluatorName || "Unallotted";
+        if (evalCodeCol > 0) row[evalCodeCol - 1] = clientRec.evaluatorCode || "";
+        var mVal = (clientRec.marks !== null && clientRec.marks !== undefined && clientRec.marks !== "" && !isNaN(clientRec.marks)) ? Number(clientRec.marks) : "";
+        if (marksCol > 0) row[marksCol - 1] = mVal;
+        if (gradeCol > 0) row[gradeCol - 1] = clientRec.grade || "—";
+        if (statusCol > 0) row[statusCol - 1] = clientRec.status || (clientRec.allottedEvaluator && clientRec.allottedEvaluator !== "Unallotted" ? "Allotted" : "Pending Allotment");
+        if (lockCol > 0) row[lockCol - 1] = clientRec.isLocked ? "YES" : "NO";
+        if (dateCol > 0 && clientRec.submissionDate) row[dateCol - 1] = clientRec.submissionDate;
+        if (modeCol > 0) row[modeCol - 1] = clientRec.submissionMode || "Offline Desk";
+        repairedCount++;
+      } else if (compCol > 0) {
+        var currentComp = String(row[compCol - 1] || "").trim();
+        var currentEval = String(row[evalCol - 1] || "").trim();
+        var currentMarks = String(row[marksCol - 1] || "").trim();
+
+        var isShifted = !currentComp.toLowerCase().startsWith("theory") &&
+                        !currentComp.toLowerCase().startsWith("practical") &&
+                        !currentComp.toLowerCase().startsWith("assignment");
+
+        if (isShifted) {
+          var shiftedEval = currentComp;
+          row[compCol - 1] = "Theory (TMA)";
+          if (!currentEval || currentEval === "Unallotted") {
+            row[evalCol - 1] = shiftedEval || "Unallotted";
+          }
+          if (/allot|pending|locked|evaluated|—|-/i.test(currentMarks)) {
+            if (statusCol > 0 && !row[statusCol - 1]) {
+              row[statusCol - 1] = currentMarks;
+            }
+            row[marksCol - 1] = "";
+          }
+          if (lockCol > 0 && !row[lockCol - 1]) row[lockCol - 1] = "NO";
+          if (modeCol > 0 && !row[modeCol - 1]) row[modeCol - 1] = "Offline Desk";
+          repairedCount++;
+        }
+      }
+    }
+
+    allRowsRange.setValues(rowsValues);
+    SpreadsheetApp.flush();
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      action: action,
+      repairedCount: repairedCount,
+      totalRows: rowsValues.length,
+      message: "Successfully realigned and repaired " + repairedCount + " Course_Ledger rows in Google Sheets."
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -2285,7 +2412,118 @@ function getSheetDataAsArray(sheet) {
   }
   return rows;
 }
+
+function getHeaderMap(sheet) {
+  if (!sheet) return {};
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return {};
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var map = {};
+  for (var c = 0; c < headers.length; c++) {
+    var raw = String(headers[c] || "").trim();
+    if (!raw) continue;
+    var clean = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+    map[clean] = c + 1; // 1-indexed for getRange/setValue
+  }
+  return map;
+}
+
+function buildCourseLedgerRow(headerMap, item) {
+  var maxCol = 0;
+  for (var k in headerMap) {
+    if (headerMap[k] > maxCol) maxCol = headerMap[k];
+  }
+  if (maxCol < 12) maxCol = 17;
+  var row = new Array(maxCol);
+  for (var i = 0; i < maxCol; i++) row[i] = "";
+
+  var setCol = function(keys, val) {
+    for (var k = 0; k < keys.length; k++) {
+      var col = headerMap[keys[k]];
+      if (col && col <= maxCol) {
+        row[col - 1] = (val !== undefined && val !== null) ? val : "";
+        return;
+      }
+    }
+  };
+
+  setCol(["subid", "assignmentid"], item.subId || "");
+  setCol(["session"], item.session || "July 2026");
+  setCol(["enrollmentno", "enrollment", "enr"], "'" + String(item.enrollmentNo || "").replace(/^'/, ''));
+  setCol(["candidatename", "studentname", "name"], item.candidateName || item.studentName || "");
+  setCol(["contactno", "contact", "mobile"], item.contact || item.studentPhone || "");
+  setCol(["emailid", "email"], item.email || item.studentEmail || "");
+  setCol(["programmecode", "programme"], item.programmeCode || item.programme || "IGNOU");
+  setCol(["coursecode", "course"], item.courseCode || "");
+  setCol(["componenttype", "component"], item.componentType || "Theory (TMA)");
+  setCol(["allottedevaluator", "evaluator", "academiccounsellor", "evaluatorname"], item.allottedEvaluator || item.evaluator || "Unallotted");
+  setCol(["evaluatorcode", "evalcode"], item.evaluatorCode || "");
+  setCol(["marks"], (item.marks !== undefined && item.marks !== null && item.marks !== "") ? item.marks : "");
+  setCol(["grade"], item.grade || "—");
+  setCol(["status"], item.status || "Pending Allotment");
+  setCol(["islocked", "locked"], item.isLocked ? "YES" : "NO");
+  setCol(["submissiondate", "date"], item.submissionDate || "");
+  setCol(["submissionmode", "mode"], item.submissionMode || "Offline Desk");
+
+  return row;
+}
 `;
+
+/**
+ * Triggers atomic realignment and repair of Course_Ledger columns in Google Sheets
+ */
+export async function postRepairCourseLedger(records?: any[]): Promise<ApiResponse> {
+  const payload = {
+    action: 'REPAIR_COURSE_LEDGER',
+    scriptUrl: getCustomScriptUrl(),
+    payload: {
+      records: records || [],
+      timestamp: new Date().toISOString(),
+    },
+  };
+
+  try {
+    const proxyRes = await fetch('/api/sheets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(35000),
+    });
+
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      return {
+        status: 'success',
+        action: 'REPAIR_COURSE_LEDGER',
+        data,
+        message: data.message || `Realigned and repaired ${data.repairedCount || 0} Course Ledger rows.`,
+      };
+    }
+  } catch (proxyErr) {
+    console.warn('[postRepairCourseLedger proxy error]:', proxyErr);
+  }
+
+  // Direct fetch fallback
+  try {
+    const directRes = await fetch(getFullAppsScriptUrl(), {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return {
+      status: 'success',
+      action: 'REPAIR_COURSE_LEDGER',
+      message: 'Repair command dispatched to Google Apps Script.',
+    };
+  } catch (err: any) {
+    return {
+      status: 'error',
+      action: 'REPAIR_COURSE_LEDGER',
+      message: err.message || 'Failed to dispatch repair command.',
+    };
+  }
+}
 
 export async function postSyncAdmissions(_records: any[]): Promise<ApiResponse> {
   return {
