@@ -157,6 +157,21 @@ interface AppContextType {
   resetRbacToDefaults: () => void;
   canPerformOperation: (operation: RbacOperation) => { allowed: boolean; requiresPin: boolean };
 
+  // 15-Minute Session Editing Step-Up Authorization
+  editingSessionUnlockedUntil: number | null;
+  isEditingUnlocked: () => boolean;
+  unlockEditingSession: (pin: string) => { success: boolean; error?: string };
+  lockEditingSession: () => void;
+  requireEditingAuth: (actionTitle: string, actionCallback: () => void, actionDescription?: string) => void;
+  editingAuthChallenge: {
+    isOpen: boolean;
+    actionTitle: string;
+    actionDescription?: string;
+    actionCallback: () => void;
+  };
+  closeEditingAuthChallenge: () => void;
+  resyncAllAllottedEvaluatorsToSheets: () => Promise<{ total: number; synced: number; error?: string }>;
+
   // Intake Master (Strictly Session Filtered)
   sessionIntakes: IntakeRecord[];
   allIntakes: IntakeRecord[];
@@ -1022,9 +1037,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [currentRole, settings.coordinatorName, currentSession, logAuditEvent]);
 
+  // 15-Minute Editing Step-Up Authorization State
+  const [editingSessionUnlockedUntil, setEditingSessionUnlockedUntil] = useState<number | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('ignou_sc2033_editing_until');
+      if (saved) {
+        const ts = parseInt(saved, 10);
+        if (ts > Date.now()) return ts;
+      }
+    } catch {}
+    return null;
+  });
+
+  const [editingAuthChallenge, setEditingAuthChallenge] = useState<{
+    isOpen: boolean;
+    actionTitle: string;
+    actionDescription?: string;
+    actionCallback: () => void;
+  }>({
+    isOpen: false,
+    actionTitle: '',
+    actionDescription: '',
+    actionCallback: () => {},
+  });
+
+  const closeEditingAuthChallenge = useCallback(() => {
+    setEditingAuthChallenge((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
   const logout = useCallback(() => {
     sessionStorage.removeItem("ignou_sc2033_auth");
     sessionStorage.removeItem("ignou_sc2033_role");
+    sessionStorage.removeItem("ignou_sc2033_editing_until");
+    setEditingSessionUnlockedUntil(null);
     setIsAuthenticated(false);
     logAuditEvent({
       action: 'USER_LOGOUT',
@@ -1035,7 +1080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       summary: 'Staff member signed out and terminal locked',
       status: 'SUCCESS',
     });
-  }, [currentRole, settings.coordinatorName, currentSession]);
+  }, [currentRole, settings.coordinatorName, currentSession, logAuditEvent]);
 
   // Inactivity Auto-Lock Protection (Mobile & Desktop): Configurable timeout with audit logging
   useEffect(() => {
@@ -2627,6 +2672,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const enteredFirst = (identifierOrPin || '').trim();
     const enteredSecond = (password !== undefined ? password : '').trim();
 
+    // Password-Only Login Enforcement: Must supply a password.
+    // Plain 4-digit PINs (1001, 2033) are rejected on the login screen, as PINs are reserved for editing actions.
+    if (!enteredSecond) {
+      return false;
+    }
+
     const staffUser = (securityCredentials.staffAccount.username || 'desk_official').trim().toLowerCase();
     const staffPass = (securityCredentials.staffAccount.password || 'sc2033desk').trim();
     const staffPin = (securityPins.deskPin || '1001').trim();
@@ -2634,6 +2685,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const coordUser = (securityCredentials.coordinatorAccount.username || 'coordinator').trim().toLowerCase();
     const coordPass = (securityCredentials.coordinatorAccount.masterPassphrase || 'sc2033coordinator').trim();
     const coordPin = (securityPins.adminPin || '2033').trim();
+
+    // Explicitly disallow entering plain 4-digit operational PINs as login password
+    if (enteredSecond === '1001' || enteredSecond === '2033' || enteredSecond === staffPin || enteredSecond === coordPin) {
+      console.warn('[Login Rejected]: Operational PIN cannot be used as login password. Please enter your password.');
+      return false;
+    }
 
     let authenticated = false;
     let resolvedRole: 'desk' | 'admin' = role;
@@ -2645,10 +2702,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (matchedSheetUser) {
-      const passMatches = enteredSecond
-        ? matchedSheetUser.password === enteredSecond
-        : (matchedSheetUser.password === enteredFirst || enteredFirst === '2033' || enteredFirst === '1001');
-      if (passMatches) {
+      if (matchedSheetUser.password === enteredSecond) {
         authenticated = true;
         resolvedRole = matchedSheetUser.role === 'admin' ? 'admin' : 'desk';
         authenticatedUserName = matchedSheetUser.fullName || matchedSheetUser.username;
@@ -2658,50 +2712,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Secondary / Emergency Fallback Check
     if (!authenticated) {
       if (role === 'desk') {
-        if (password !== undefined && password !== '') {
-          // Username + Password mode
-          const userMatch = enteredFirst.toLowerCase() === staffUser || enteredFirst.toLowerCase() === 'desk' || enteredFirst.toLowerCase() === 'official';
-          const passMatch = enteredSecond === staffPass || enteredSecond === staffPin || enteredSecond === 'sc2033desk' || enteredSecond === '1001';
-          if (userMatch && passMatch) {
-            authenticated = true;
-            resolvedRole = 'desk';
-          }
-        } else {
-          // Single field entry (PIN or Password fallback)
-          if (
-            enteredFirst === staffPass ||
-            enteredFirst === staffPin ||
-            enteredFirst === 'sc2033desk' ||
-            enteredFirst === '1001' ||
-            enteredFirst === coordPass ||
-            enteredFirst === coordPin ||
-            enteredFirst === 'sc2033coordinator' ||
-            enteredFirst === '2033'
-          ) {
-            authenticated = true;
-            resolvedRole = 'desk';
-          }
+        const userMatch = enteredFirst.toLowerCase() === staffUser || enteredFirst.toLowerCase() === 'desk' || enteredFirst.toLowerCase() === 'official';
+        const passMatch = enteredSecond === staffPass || enteredSecond === 'sc2033desk';
+        if (userMatch && passMatch) {
+          authenticated = true;
+          resolvedRole = 'desk';
         }
       } else if (role === 'admin') {
-        if (password !== undefined && password !== '') {
-          // Username + Passphrase mode
-          const userMatch = enteredFirst.toLowerCase() === coordUser || enteredFirst.toLowerCase() === 'admin' || enteredFirst.toLowerCase() === 'sant.k.gupta';
-          const passMatch = enteredSecond === coordPass || enteredSecond === coordPin || enteredSecond === 'sc2033coordinator' || enteredSecond === '2033';
-          if (userMatch && passMatch) {
-            authenticated = true;
-            resolvedRole = 'admin';
-          }
-        } else {
-          // Single field entry (Master Passphrase or PIN fallback)
-          if (
-            enteredFirst === coordPass ||
-            enteredFirst === coordPin ||
-            enteredFirst === 'sc2033coordinator' ||
-            enteredFirst === '2033'
-          ) {
-            authenticated = true;
-            resolvedRole = 'admin';
-          }
+        const userMatch = enteredFirst.toLowerCase() === coordUser || enteredFirst.toLowerCase() === 'admin' || enteredFirst.toLowerCase() === 'sant.k.gupta';
+        const passMatch = enteredSecond === coordPass || enteredSecond === 'sc2033coordinator';
+        if (userMatch && passMatch) {
+          authenticated = true;
+          resolvedRole = 'admin';
         }
       }
     }
@@ -2792,6 +2814,140 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentSession,
     logAuditEvent,
   ]);
+
+  // 15-Minute Session Editing Step-Up Authorization Helpers
+  const isEditingUnlocked = useCallback((): boolean => {
+    if (!editingSessionUnlockedUntil) return false;
+    return Date.now() < editingSessionUnlockedUntil;
+  }, [editingSessionUnlockedUntil]);
+
+  const unlockEditingSession = useCallback((pin: string): { success: boolean; error?: string } => {
+    const trimmed = (pin || '').trim();
+    const deskPin = (securityPins.deskPin || '1001').trim();
+    const adminPin = (securityPins.adminPin || '2033').trim();
+
+    // Verify against operational PINs (1001 for Desk, 2033 for Coordinator, or custom configured)
+    const isValid = currentRole === 'ADMIN'
+      ? (trimmed === adminPin || trimmed === deskPin || trimmed === '2033' || trimmed === '1001')
+      : (trimmed === deskPin || trimmed === adminPin || trimmed === '1001' || trimmed === '2033');
+
+    if (isValid) {
+      const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute sliding window
+      setEditingSessionUnlockedUntil(expiresAt);
+      try {
+        sessionStorage.setItem('ignou_sc2033_editing_until', expiresAt.toString());
+      } catch {}
+      logAuditEvent({
+        action: 'STEP_UP_AUTHORIZED',
+        category: 'SECURITY',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: currentSession,
+        summary: '15-minute operational editing authorization granted via PIN verification',
+        status: 'SUCCESS',
+      });
+      return { success: true };
+    }
+
+    logAuditEvent({
+      action: 'STEP_UP_FAILED',
+      category: 'SECURITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      role: currentRole,
+      session: currentSession,
+      summary: 'Operational PIN verification failed for editing action',
+      status: 'WARNING',
+    });
+    return { success: false, error: 'Invalid operational PIN. Use your 4-digit PIN (1001 for Desk or 2033 for Coordinator).' };
+  }, [currentRole, securityPins, settings.coordinatorName, currentSession, logAuditEvent]);
+
+  const lockEditingSession = useCallback(() => {
+    setEditingSessionUnlockedUntil(null);
+    try {
+      sessionStorage.removeItem('ignou_sc2033_editing_until');
+    } catch {}
+    logAuditEvent({
+      action: 'STEP_UP_AUTHORIZED',
+      category: 'SECURITY',
+      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      role: currentRole,
+      session: currentSession,
+      summary: 'Operational editing mode manually locked by user',
+      status: 'SUCCESS',
+    });
+  }, [currentRole, settings.coordinatorName, currentSession, logAuditEvent]);
+
+  const requireEditingAuth = useCallback((actionTitle: string, actionCallback: () => void, actionDescription?: string) => {
+    if (isEditingUnlocked()) {
+      actionCallback();
+      return;
+    }
+    setEditingAuthChallenge({
+      isOpen: true,
+      actionTitle,
+      actionDescription,
+      actionCallback: () => {
+        actionCallback();
+      },
+    });
+  }, [isEditingUnlocked]);
+
+  // Emergency Ledger Parity & Evaluator Sync: Dispatches all allotted scripts to Google Sheets Course_Ledger
+  const resyncAllAllottedEvaluatorsToSheets = useCallback(async (): Promise<{ total: number; synced: number; error?: string }> => {
+    const eligibleRecords = courseEvaluations.filter((rec) => {
+      const hasEvaluator = Boolean(rec.evaluatorId || rec.evaluatorName || rec.evaluatorCode);
+      const hasMarks = rec.marks !== null && rec.marks !== undefined;
+      return hasEvaluator || hasMarks;
+    });
+
+    if (eligibleRecords.length === 0) {
+      showToast('No allotted course scripts found to sync.', 'info');
+      return { total: 0, synced: 0 };
+    }
+
+    let syncedCount = 0;
+    try {
+      showToast(`Initiating Google Sheets Course_Ledger parity sync for ${eligibleRecords.length} records...`, 'info');
+      for (const rec of eligibleRecords) {
+        const cleanEnr = (rec.enrollmentNo || rec.Enrollment_No || '').trim();
+        const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+        const recSess = rec.session || rec.Session || currentSession;
+        const evalDisplayName = rec.evaluatorName
+          ? `${rec.evaluatorName}${rec.evaluatorCode ? ` (${rec.evaluatorCode})` : ''}`
+          : (rec.evaluatorCode ? `Evaluator (${rec.evaluatorCode})` : 'Unallotted');
+
+        await postAllotEvaluator(rec.id, {
+          id: rec.evaluatorId || '',
+          name: rec.evaluatorName || 'Unallotted',
+          evaluatorCode: rec.evaluatorCode || '',
+          Allotted_Evaluator: evalDisplayName,
+          enrollmentNo: cleanEnr,
+          courseCode: cleanCourse,
+          session: recSess,
+          statusHistory: rec.statusHistory,
+        });
+        syncedCount++;
+      }
+
+      showToast(`Successfully synced ${syncedCount} of ${eligibleRecords.length} records to Course_Ledger!`, 'success');
+
+      logAuditEvent({
+        action: 'SHEETS_SYNCED',
+        category: 'DATA_INTEGRITY',
+        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        role: currentRole,
+        session: currentSession,
+        summary: `Resynced ${syncedCount}/${eligibleRecords.length} Course Ledger evaluator allotments to Google Sheets`,
+        status: 'SUCCESS',
+      });
+
+      return { total: eligibleRecords.length, synced: syncedCount };
+    } catch (err: any) {
+      console.error('Error during resyncAllAllottedEvaluatorsToSheets:', err);
+      showToast('Ledger sync completed with warnings. Check connection.', 'warning');
+      return { total: eligibleRecords.length, synced: syncedCount, error: err?.message || 'Sync failed' };
+    }
+  }, [courseEvaluations, currentSession, currentRole, settings.coordinatorName, showToast, logAuditEvent]);
 
   // Role switching
   const setRole = useCallback(
@@ -9166,6 +9322,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateRbacConfig,
         resetRbacToDefaults,
         canPerformOperation,
+        // 15-Minute Session Editing Step-Up Authorization
+        editingSessionUnlockedUntil,
+        isEditingUnlocked,
+        unlockEditingSession,
+        lockEditingSession,
+        requireEditingAuth,
+        editingAuthChallenge,
+        closeEditingAuthChallenge,
+        resyncAllAllottedEvaluatorsToSheets,
         sessionIntakes,
         allIntakes: intakes,
         intakeRegister: intakes,

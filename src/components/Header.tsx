@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   ShieldAlert,
@@ -9,6 +9,7 @@ import {
   Search,
   Menu,
   Lock,
+  Unlock,
   Home,
   GraduationCap,
   Layers,
@@ -37,11 +38,29 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
     isSidebarHidden,
     toggleSidebarHidden,
     isHeaderCompact,
+    editingSessionUnlockedUntil,
+    lockEditingSession,
   } = useApp();
 
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [newSessionInput, setNewSessionInput] = useState('');
+  const [editingRemainingSeconds, setEditingRemainingSeconds] = useState<number>(0);
+
+  // 15-minute Editing step-up countdown tracker
+  useEffect(() => {
+    if (!editingSessionUnlockedUntil) {
+      setEditingRemainingSeconds(0);
+      return;
+    }
+    const update = () => {
+      const diff = Math.max(0, Math.ceil((editingSessionUnlockedUntil - Date.now()) / 1000));
+      setEditingRemainingSeconds(diff);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [editingSessionUnlockedUntil]);
 
   const handleAddSession = (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,6 +229,31 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
 
         {/* Zone 3: Recent Activity, Academic Cycle & Executive Profile / Role */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* 15-Minute Operational Editing Session Countdown Indicator */}
+          {editingRemainingSeconds > 0 && (
+            <div
+              id="header-editing-unlocked-pill"
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/15 border border-amber-500/40 rounded-lg text-amber-900 text-xs font-semibold shadow-2xs animate-in fade-in"
+              title="Editing authorized via operational PIN (15-min sliding window)"
+            >
+              <Unlock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <div className="flex items-center gap-1">
+                <span className="hidden md:inline text-[11px] font-bold text-amber-950">Editing:</span>
+                <span className="font-mono text-[11px] font-bold text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                  {Math.floor(editingRemainingSeconds / 60)}:{String(editingRemainingSeconds % 60).padStart(2, '0')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={lockEditingSession}
+                className="ml-0.5 px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-extrabold bg-amber-300 hover:bg-amber-400 text-amber-950 rounded transition cursor-pointer"
+                title="Lock operational editing access immediately"
+              >
+                Lock
+              </button>
+            </div>
+          )}
+
           {/* Recent Activity Popover (Last 5 Audit Trail Operations) */}
           <RecentActivity
             onViewAllActivity={onNavigateTab ? () => onNavigateTab('AUDIT_TRAIL') : undefined}

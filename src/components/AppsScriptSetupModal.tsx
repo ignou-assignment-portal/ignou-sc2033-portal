@@ -446,6 +446,20 @@ export const AppsScriptSetupModal: React.FC<AppsScriptSetupModalProps> = ({
                   Tip: Re-registration programme codes can include academic year suffixes (e.g. <code>MCOM 2</code>, <code>BAM 2</code>, <code>BAM 3</code>).
                 </p>
               </div>
+
+              {/* Course Ledger 12-Column Specification */}
+              <div className="bg-amber-50/70 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-amber-950">Course_Ledger 12-Column Architecture (Evaluator Allotment Parity):</span>
+                  <span className="bg-amber-200 text-amber-900 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">Col 9: Allotted_Evaluator</span>
+                </div>
+                <div className="p-2.5 bg-white border border-amber-200 rounded-lg font-mono text-[11px] text-amber-950 leading-relaxed overflow-x-auto">
+                  1.Sub_ID · 2.Session · 3.Enrollment_No · 4.Candidate_Name · 5.Contact_No · 6.Email_ID · 7.Programme_Code · 8.Course_Code · <strong>9.Allotted_Evaluator</strong> · 10.Marks · 11.Grade · 12.Status
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  ✓ <strong>Evaluator Recording Fix:</strong> Column 9 is mapped to <code>Allotted_Evaluator</code>. If an entry is missing in Course_Ledger when allotted, the updated <code>Code.gs</code> automatically appends the row so no evaluator assignments are lost.
+                </p>
+              </div>
             </div>
           )}
 

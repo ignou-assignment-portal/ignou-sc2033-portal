@@ -53,7 +53,11 @@ export const CourseEvaluationMaster: React.FC = () => {
     syncEvaluatorsDirectory,
     showToast,
     canPerformOperation,
+    requireEditingAuth,
+    resyncAllAllottedEvaluatorsToSheets,
   } = useApp();
+
+  const [isResyncingLedger, setIsResyncingLedger] = useState(false);
 
   // Status History Modal State
   const [historyTargetRecord, setHistoryTargetRecord] = useState<CourseEvaluationRecord | null>(null);
@@ -191,12 +195,8 @@ export const CourseEvaluationMaster: React.FC = () => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
-  // Evaluator allotment handler
-  const handleAllotEvaluator = async (
-    row: any,
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const selectedEvaluator = e.target.value;
+  // Helper to execute allotment once operational editing auth is verified
+  const executeAllotEvaluator = (row: any, selectedEvaluator: string) => {
     const isUnallotted = !selectedEvaluator || selectedEvaluator === "Unallotted";
 
     const matchedEv = isUnallotted
@@ -246,6 +246,36 @@ export const CourseEvaluationMaster: React.FC = () => {
     showToast(isUnallotted ? `Unallotted ${courseCodeDisplay}` : `Allotted ${courseCodeDisplay} to ${evalDisplayName}`);
   };
 
+  // Evaluator allotment handler protected by operational PIN
+  const handleAllotEvaluator = (
+    row: any,
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const selectedEvaluator = e.target.value;
+    requireEditingAuth(
+      'Allot Academic Counsellor',
+      () => executeAllotEvaluator(row, selectedEvaluator),
+      'Assigning or updating academic counsellor requires operational PIN verification.'
+    );
+  };
+
+  // Helper for marks inputs protected by operational PIN
+  const onMarksInputChange = (recordId: string, valStr: string) => {
+    requireEditingAuth(
+      'Update Assignment Marks',
+      () => {
+        if (valStr === '') {
+          updateEvaluationMarks(recordId, null);
+          return;
+        }
+        const n = parseInt(valStr, 10);
+        if (isNaN(n) || n < 0 || n > 100) return;
+        updateEvaluationMarks(recordId, n);
+      },
+      'Entering or modifying marks requires operational PIN verification.'
+    );
+  };
+
   // Lock marks handler (Protected by Coordinator PIN for Desk Role)
   const handleLockMarks = (evaluationId: string, shouldLock: boolean) => {
     const perm = canPerformOperation('marks_locking');
@@ -254,21 +284,15 @@ export const CourseEvaluationMaster: React.FC = () => {
       return;
     }
 
-    if (perm.requiresPin) {
-      setPinChallenge({
-        isOpen: true,
-        title: shouldLock ? 'Coordinator Authorization: Lock Marks' : 'Coordinator Authorization: Unlock Marks',
-        description: `Finalizing marks is coordinator-protected under SC-2033 governance. Enter Coordinator PIN to ${shouldLock ? 'lock' : 'unlock'} this script.`,
-        action: () => toggleLockMarks(evaluationId, shouldLock),
-      });
-      return;
-    }
-
-    toggleLockMarks(evaluationId, shouldLock);
+    requireEditingAuth(
+      shouldLock ? 'Lock Marks' : 'Unlock Marks',
+      () => toggleLockMarks(evaluationId, shouldLock),
+      `Finalizing marks is coordinator-protected under SC-2033 governance. Enter operational PIN to ${shouldLock ? 'lock' : 'unlock'} this script.`
+    );
   };
 
   // Batch Allotment Action (Unrestricted for all active academic counsellors)
-  const handleBatchAllot = async () => {
+  const executeBatchAllot = () => {
     if (selectedIds.length === 0) {
       setBatchMessage('Please select at least one script to allot.');
       setTimeout(() => setBatchMessage(null), 3500);
@@ -315,6 +339,14 @@ export const CourseEvaluationMaster: React.FC = () => {
     setTimeout(() => setBatchMessage(null), 4000);
   };
 
+  const handleBatchAllot = () => {
+    requireEditingAuth(
+      'Batch Allot Academic Counsellor',
+      () => executeBatchAllot(),
+      `Batch allotting ${selectedIds.length} script(s) requires operational PIN verification.`
+    );
+  };
+
   // Batch Lock / Unlock (Coordinator Protected)
   const handleBatchLock = (shouldLock: boolean) => {
     if (selectedIds.length === 0) return;
@@ -325,21 +357,14 @@ export const CourseEvaluationMaster: React.FC = () => {
       return;
     }
 
-    if (perm.requiresPin) {
-      setPinChallenge({
-        isOpen: true,
-        title: shouldLock ? `Coordinator Authorization: Batch Lock ${selectedIds.length} Scripts` : `Coordinator Authorization: Batch Unlock ${selectedIds.length} Scripts`,
-        description: `Batch marks finalization is coordinator-protected. Enter Coordinator PIN to ${shouldLock ? 'lock' : 'unlock'} these ${selectedIds.length} scripts.`,
-        action: () => {
-          batchLockMarks(selectedIds, shouldLock);
-          setSelectedIds([]);
-        },
-      });
-      return;
-    }
-
-    batchLockMarks(selectedIds, shouldLock);
-    setSelectedIds([]);
+    requireEditingAuth(
+      shouldLock ? `Batch Lock ${selectedIds.length} Scripts` : `Batch Unlock ${selectedIds.length} Scripts`,
+      () => {
+        batchLockMarks(selectedIds, shouldLock);
+        setSelectedIds([]);
+      },
+      `Batch marks finalization requires operational PIN verification.`
+    );
   };
 
   // Statistics calculation for active session
@@ -453,6 +478,26 @@ export const CourseEvaluationMaster: React.FC = () => {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingEvaluators ? 'animate-spin text-indigo-600' : 'text-indigo-700'}`} />
               <span>{isSyncingEvaluators ? 'Syncing Evaluators...' : 'Sync Evaluators Directory'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                requireEditingAuth('Repair Course Ledger Parity', async () => {
+                  setIsResyncingLedger(true);
+                  try {
+                    await resyncAllAllottedEvaluatorsToSheets();
+                  } finally {
+                    setIsResyncingLedger(false);
+                  }
+                }, 'Re-syncing evaluator allotments and marks to Google Sheets Course_Ledger requires operational PIN verification.');
+              }}
+              disabled={isResyncingLedger}
+              id="resync-ledger-parity-btn"
+              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
+              title="Resend all allotted academic counsellors and marks to Google Sheets Course_Ledger to guarantee row parity"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isResyncingLedger ? 'animate-spin text-amber-700' : 'text-amber-800'}`} />
+              <span>{isResyncingLedger ? 'Repairing Ledger...' : 'Repair Ledger Parity'}</span>
             </button>
 
             <button
@@ -844,16 +889,7 @@ export const CourseEvaluationMaster: React.FC = () => {
                           max="100"
                           value={numericMarks !== null ? numericMarks : ''}
                           placeholder="0-100"
-                          onChange={(e) => {
-                            const valStr = e.target.value;
-                            if (valStr === '') {
-                              updateEvaluationMarks(recordId, null);
-                              return;
-                            }
-                            const n = parseInt(valStr, 10);
-                            if (isNaN(n) || n < 0 || n > 100) return;
-                            updateEvaluationMarks(recordId, n);
-                          }}
+                          onChange={(e) => onMarksInputChange(recordId, e.target.value)}
                           className="w-20 px-2.5 py-1 text-xs font-mono font-bold border border-zinc-300 rounded-lg text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <span className="text-xs text-zinc-400 font-mono">/100</span>
@@ -1143,16 +1179,7 @@ export const CourseEvaluationMaster: React.FC = () => {
                               max="100"
                               value={numericMarks !== null ? numericMarks : ''}
                               placeholder="0-100"
-                              onChange={(e) => {
-                                const valStr = e.target.value;
-                                if (valStr === '') {
-                                  updateEvaluationMarks(recordId, null);
-                                  return;
-                                }
-                                const n = parseInt(valStr, 10);
-                                if (isNaN(n) || n < 0 || n > 100) return;
-                                updateEvaluationMarks(recordId, n);
-                              }}
+                              onChange={(e) => onMarksInputChange(recordId, e.target.value)}
                               className="w-20 px-2.5 py-1 text-xs font-mono font-bold border border-zinc-300 rounded-lg text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
                             <span className="text-[11px] text-zinc-400 font-mono">/100</span>

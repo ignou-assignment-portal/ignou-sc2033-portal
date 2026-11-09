@@ -2099,13 +2099,18 @@ function doPost(e) {
         }
 
         var subIdCol = colMap["subid"] || colMap["assignmentid"] || 1;
+        var sessCol = colMap["session"] || 2;
         var enrCol = colMap["enrollmentno"] || colMap["enrollment"] || colMap["enr"] || 3;
+        var nameCol = colMap["candidatename"] || colMap["studentname"] || colMap["name"] || 4;
+        var contactCol = colMap["contactno"] || colMap["contact"] || colMap["mobile"] || 5;
+        var emailCol = colMap["emailid"] || colMap["email"] || 6;
+        var progCol = colMap["programmecode"] || colMap["programme"] || 7;
         var courseCol = colMap["coursecode"] || colMap["course"] || 8;
-        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || colMap["counsellor"] || colMap["evaluatorname"] || 10;
-        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 11;
-        var marksCol = colMap["marks"] || 12;
-        var gradeCol = colMap["grade"] || 13;
-        var statusCol = colMap["status"] || 14;
+        var evalCol = colMap["allottedevaluator"] || colMap["evaluator"] || colMap["academiccounsellor"] || colMap["counsellor"] || colMap["evaluatorname"] || 9;
+        var evalCodeCol = colMap["evaluatorcode"] || colMap["evalcode"] || 0;
+        var marksCol = colMap["marks"] || 10;
+        var gradeCol = colMap["grade"] || 11;
+        var statusCol = colMap["status"] || 12;
 
         var itemsToProcess = [];
         if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
@@ -2116,6 +2121,10 @@ function doPost(e) {
               subId: payload.subIds[s],
               evaluator: payload.evaluator || payload.Allotted_Evaluator || "",
               evaluatorCode: payload.evaluatorCode || "",
+              enrollmentNo: payload.enrollmentNo || "",
+              courseCode: payload.courseCode || "",
+              session: payload.session || "",
+              candidateName: payload.candidateName || "",
               status: "Allotted"
             });
           }
@@ -2135,6 +2144,7 @@ function doPost(e) {
           var cleanEnr = function(v) { return String(v || "").replace(/^['"]+/, "").replace(/\s+/g, "").toUpperCase(); };
           var cleanCourse = function(v) { return String(v || "").replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); };
 
+          var matched = false;
           for (var i = 1; i < data.length; i++) {
             var rowSubId = String(data[i][subIdCol - 1] || "").trim();
             var normRowSubId = rowSubId.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -2149,18 +2159,42 @@ function doPost(e) {
             var isEnrCourseMatch = targetEnr && targetCourse && cleanEnr(rowEnr) === cleanEnr(targetEnr) && cleanCourse(rowCourse) === cleanCourse(targetCourse);
 
             if (isSubIdMatch || isEnrCourseMatch) {
+              matched = true;
               if (action === "UPDATE_MARKS") {
-                if (marksCol > 0) ledgerSheet.getRange(i + 1, marksCol).setValue(item.marks !== undefined ? item.marks : "");
+                if (marksCol > 0) ledgerSheet.getRange(i + 1, marksCol).setValue(item.marks !== undefined && item.marks !== null ? item.marks : "");
                 if (gradeCol > 0) ledgerSheet.getRange(i + 1, gradeCol).setValue(item.grade || "");
-                if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue("Marks Locked");
+                if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue(item.isLocked ? "Marks Locked" : "Evaluated");
               } else {
-                if (evalCol > 0) ledgerSheet.getRange(i + 1, evalCol).setValue(evalVal || "Allotted");
+                var allotDisplay = evalVal || (evalCodeVal ? ("Evaluator (" + evalCodeVal + ")") : "Unallotted");
+                if (evalCol > 0) ledgerSheet.getRange(i + 1, evalCol).setValue(allotDisplay);
                 if (evalCodeCol > 0 && evalCodeVal) ledgerSheet.getRange(i + 1, evalCodeCol).setValue(evalCodeVal);
                 if (statusCol > 0) ledgerSheet.getRange(i + 1, statusCol).setValue(evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment");
               }
               updatedCount++;
               break;
             }
+          }
+
+          // Auto-insert fallback: If script row is not in Course_Ledger, automatically append it
+          if (!matched && (targetEnr || normTargetSubId)) {
+            var finalSubId = targetSubId || ("SUB_" + targetEnr + "_" + targetCourse + "_" + (item.session || "JUL2026").replace(/\s+/g, "").toUpperCase());
+            var autoStatus = evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment";
+            var appendRowVals = [
+              finalSubId,
+              item.session || "July 2026",
+              "'" + targetEnr,
+              item.candidateName || item.studentName || "",
+              item.contact || item.studentPhone || "",
+              item.email || item.studentEmail || "",
+              item.programmeCode || item.programme || "IGNOU",
+              targetCourse || item.courseCode || "",
+              evalVal || "Unallotted",
+              item.marks !== undefined && item.marks !== null ? item.marks : "",
+              item.grade || "—",
+              item.status || autoStatus
+            ];
+            ledgerSheet.appendRow(appendRowVals);
+            updatedCount++;
           }
         }
       }

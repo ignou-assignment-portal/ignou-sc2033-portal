@@ -19,6 +19,7 @@ import { ReceiptModal } from './components/ReceiptModal';
 import { RegistrationReceiptModal } from './components/RegistrationReceiptModal';
 import { StudentSearchModal } from './components/StudentSearchModal';
 import { AdminPinModal } from './components/AdminPinModal';
+import { EditingPinModal } from './components/EditingPinModal';
 import { GatekeeperLockScreen } from './components/GatekeeperLockScreen';
 import { StudyCentreHomePage } from './components/StudyCentreHomePage';
 import { QuickActionBar } from './components/QuickActionBar';
@@ -213,6 +214,7 @@ const MainApp: React.FC = () => {
       <RegistrationReceiptModal />
       <StudentSearchModal />
       <AdminPinModal />
+      <EditingPinModal />
 
       {/* Global Toast Notification */}
       <Toast message={toastMessage} type={toastType} onClose={hideToast} />

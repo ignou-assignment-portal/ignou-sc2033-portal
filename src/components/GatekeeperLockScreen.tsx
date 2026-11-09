@@ -313,8 +313,8 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                   >
                     {selectedRole === 'desk' ? 'Staff Password' : 'Coordinator Master Passphrase'}
                   </label>
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {selectedRole === 'desk' ? 'Pass or PIN' : 'Passphrase'}
+                  <span className="text-[10px] text-amber-400/90 font-mono font-medium">
+                    Password Only
                   </span>
                 </div>
 
@@ -327,7 +327,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     id="terminal-password-input"
                     type={showPassword ? 'text' : 'password'}
                     disabled={isLockedOut}
-                    placeholder={selectedRole === 'desk' ? 'Enter staff password or PIN' : 'Enter Master Passphrase or PIN'}
+                    placeholder={selectedRole === 'desk' ? 'Enter staff password' : 'Enter Master Passphrase'}
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -374,7 +374,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
             {/* Inactivity & Lockout Security Policy Notice */}
             <div className="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-2xl text-center space-y-1">
               <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Inactivity auto-locks after <strong>{securityCredentials?.inactivityTimeoutMinutes || 20} min</strong>. 5 consecutive failed attempts lock the terminal for <strong>{securityCredentials?.lockoutDurationMinutes || 3} min</strong>.
+                Login requires <strong>Password only</strong>. Operational 4-digit PIN (<span className="text-amber-400 font-mono">1001</span> Desk / <span className="text-amber-400 font-mono">2033</span> Coordinator) is requested during data editing. Auto-locks after <strong>{securityCredentials?.inactivityTimeoutMinutes || 20} min</strong>.
               </p>
             </div>
 
