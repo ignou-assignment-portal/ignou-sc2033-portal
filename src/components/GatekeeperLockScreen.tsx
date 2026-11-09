@@ -221,7 +221,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
               </div>
             )}
 
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} autoComplete="off" className="space-y-4">
               {/* Role Selector Pill Toggle */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-2">
@@ -256,17 +256,6 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     <span>Coordinator</span>
                   </button>
                 </div>
-                <div className="text-[11px] text-zinc-400 mt-1.5 px-1">
-                  {selectedRole === 'desk' ? (
-                    <span className="text-teal-400 font-medium">
-                      ✓ Front Counter: Student Intake, Script Receiving & Search
-                    </span>
-                  ) : (
-                    <span className="text-indigo-400 font-medium">
-                      ✓ Master Authority: Marks Locking, Remuneration & Settings
-                    </span>
-                  )}
-                </div>
               </div>
 
               {/* Username / ID Input */}
@@ -283,11 +272,17 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                   </div>
                   <input
                     id="terminal-username-input"
+                    name="sc2033_usr"
                     type="text"
                     disabled={isLockedOut}
                     placeholder={selectedRole === 'desk' ? 'Enter staff username' : 'Enter coordinator ID'}
                     value={username}
                     autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
                     onChange={(e) => {
                       setUsername(e.target.value);
                       if (errorMessage) setErrorMessage(null);
@@ -299,17 +294,12 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
 
               {/* Password / Master Passphrase Input */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label
-                    htmlFor="terminal-password-input"
-                    className="block text-xs font-semibold text-zinc-300"
-                  >
-                    {selectedRole === 'desk' ? 'Staff Password' : 'Coordinator Master Passphrase'}
-                  </label>
-                  <span className="text-[10px] text-amber-400/90 font-mono font-medium">
-                    Password Only
-                  </span>
-                </div>
+                <label
+                  htmlFor="terminal-password-input"
+                  className="block text-xs font-semibold text-zinc-300 mb-1.5"
+                >
+                  {selectedRole === 'desk' ? 'Staff Password' : 'Coordinator Master Passphrase'}
+                </label>
 
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
@@ -318,10 +308,17 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
 
                   <input
                     id="terminal-password-input"
+                    name="sc2033_pwd"
                     type={showPassword ? 'text' : 'password'}
                     disabled={isLockedOut}
                     placeholder={selectedRole === 'desk' ? 'Enter staff password' : 'Enter Master Passphrase'}
                     value={password}
+                    autoComplete="new-password"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
                     onChange={(e) => {
                       setPassword(e.target.value);
                       if (errorMessage) setErrorMessage(null);
@@ -363,13 +360,6 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                 </span>
               </button>
             </form>
-
-            {/* Inactivity & Lockout Security Policy Notice */}
-            <div className="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-2xl text-center space-y-1">
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Login requires <strong>Password only</strong>. Operational 4-digit PIN (<span className="text-amber-400 font-mono">1001</span> Desk / <span className="text-amber-400 font-mono">2033</span> Coordinator) is requested during data editing. Auto-locks after <strong>20 min</strong>.
-              </p>
-            </div>
 
             {onBackToHome && (
               <div className="pt-1">
