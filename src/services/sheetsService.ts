@@ -2061,7 +2061,12 @@ function doPost(e) {
 
     var cleanCourses = [];
     for (var c = 0; c < courseList.length; c++) {
-      var cleanCode = String(courseList[c]).replace(/\\s*[\\[\\(](Practical|TMA|Both|P|Asgn)[\\]\\)]\\s*/gi, "").trim().toUpperCase();
+      var rawC = String(courseList[c] || "").trim();
+      var parenIdx = rawC.indexOf("(");
+      if (parenIdx !== -1) rawC = rawC.substring(0, parenIdx);
+      var brackIdx = rawC.indexOf("[");
+      if (brackIdx !== -1) rawC = rawC.substring(0, brackIdx);
+      var cleanCode = rawC.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
       if (cleanCode && cleanCourses.indexOf(cleanCode) === -1) {
         cleanCourses.push(cleanCode);
       }
@@ -2082,8 +2087,9 @@ function doPost(e) {
 
     for (var k = 0; k < cleanCourses.length; k++) {
       var cCode = cleanCourses[k];
-      var subId = "SUB_" + enrollment + "_" + cCode + "_" + session.replace(/\s+/g, "").toUpperCase();
-      var isPrac = /lab|prac|project|viva|p$/i.test(cCode) || ((prog === 'MCA' || prog === 'BCA' || prog === 'BLIS' || prog === 'MLIS') && /l|p/i.test(cCode));
+      var subId = "SUB_" + enrollment + "_" + cCode + "_" + session.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      var cUpper = cCode.toUpperCase();
+      var isPrac = cUpper.indexOf("LAB") !== -1 || cUpper.indexOf("PRAC") !== -1 || cUpper.indexOf("PROJECT") !== -1 || cUpper.indexOf("VIVA") !== -1 || cUpper.charAt(cUpper.length - 1) === 'P' || ((prog === 'MCA' || prog === 'BCA' || prog === 'BLIS' || prog === 'MLIS') && (cUpper.indexOf("L") !== -1 || cUpper.indexOf("P") !== -1));
       var compType = isPrac ? "Practical" : "Theory (TMA)";
 
       var rowItem = {
@@ -2173,8 +2179,17 @@ function doPost(e) {
           var evalVal = item.evaluator || item.Allotted_Evaluator || item.evaluatorName || "";
           var evalCodeVal = item.evaluatorCode || "";
 
-          var cleanEnr = function(v) { return String(v || "").replace(/^['"]+/, "").replace(/\s+/g, "").toUpperCase(); };
-          var cleanCourse = function(v) { return String(v || "").replace(/\s*[\(\[](Practical|TMA\s*\+\s*Practical|TMA|Both|P|Asgn|Assignment)[\)\]]\s*/gi, "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); };
+          var cleanEnr = function(v) {
+            return String(v || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          };
+          var cleanCourse = function(v) {
+            var s = String(v || "").toUpperCase();
+            var pIdx = s.indexOf("(");
+            if (pIdx !== -1) s = s.substring(0, pIdx);
+            var bIdx = s.indexOf("[");
+            if (bIdx !== -1) s = s.substring(0, bIdx);
+            return s.replace(/[^A-Za-z0-9]/g, "");
+          };
 
           var matched = false;
           for (var i = 1; i < data.length; i++) {
@@ -2210,7 +2225,7 @@ function doPost(e) {
 
           // Auto-insert fallback: If script row is not in Course_Ledger, dynamically append it matching exact headers
           if (!matched && (targetEnr || normTargetSubId)) {
-            var finalSubId = targetSubId || ("SUB_" + targetEnr + "_" + targetCourse + "_" + (item.session || "JUL2026").replace(/\s+/g, "").toUpperCase());
+            var finalSubId = targetSubId || ("SUB_" + targetEnr + "_" + targetCourse + "_" + (item.session || "JUL2026").replace(/[^A-Za-z0-9]/g, "").toUpperCase());
             var autoStatus = evalVal && evalVal !== "Unallotted" ? "Allotted" : "Pending Allotment";
             var appendRowVals = buildCourseLedgerRow(colMap, {
               subId: finalSubId,
