@@ -32,6 +32,8 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
     lockoutState,
     resetLockout,
     sheetUsers,
+    fetchAllData,
+    isSyncingSheets,
   } = useApp();
 
   const [selectedRole, setSelectedRole] = useState<'desk' | 'admin'>('desk');
@@ -41,6 +43,11 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
+
+  // Pre-hydrate Google Sheets users and credentials when Gatekeeper screen mounts
+  useEffect(() => {
+    fetchAllData(true);
+  }, [fetchAllData]);
 
   // Synchronize default username when switching roles
   const handleRoleChange = (role: 'desk' | 'admin') => {
@@ -114,7 +121,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
       } else {
         const remaining = maxAttempts - currentAttempts;
         setErrorMessage(
-          `Authentication Denied: Invalid credentials for ${selectedRole === 'desk' ? 'Desk Official' : 'Coordinator'}. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before security freeze.`
+          `Authentication Denied: Invalid credentials. Please verify your username and password as entered in the Google Sheets Users tab (${remaining} attempt${remaining === 1 ? '' : 's'} remaining).`
         );
       }
       setPassword('');

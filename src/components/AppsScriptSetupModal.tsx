@@ -420,18 +420,22 @@ export const AppsScriptSetupModal: React.FC<AppsScriptSetupModalProps> = ({
                   <span className="font-bold text-xs text-slate-800">Operational & Evaluation Tabs</span>
                   <span className="text-[10px] font-mono text-slate-400">Assignment Operations</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                   <div className="p-2 rounded-lg bg-slate-900 text-white font-mono flex items-center justify-between">
                     <span>Intake_Register</span>
                     <span className="text-[9px] uppercase tracking-wider text-slate-300 font-sans">Receipts</span>
                   </div>
                   <div className="p-2 rounded-lg bg-amber-900 text-white font-mono flex items-center justify-between">
                     <span>Course_Ledger</span>
-                    <span className="text-[9px] uppercase tracking-wider text-amber-200 font-sans">Disaggregated</span>
+                    <span className="text-[9px] uppercase tracking-wider text-amber-200 font-sans">Ledger</span>
                   </div>
                   <div className="p-2 rounded-lg bg-blue-900 text-white font-mono flex items-center justify-between">
                     <span>Evaluators_Master</span>
                     <span className="text-[9px] uppercase tracking-wider text-blue-200 font-sans">Directory</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-purple-900 text-white font-mono flex items-center justify-between">
+                    <span>Users</span>
+                    <span className="text-[9px] uppercase tracking-wider text-purple-200 font-sans">Staff Auth</span>
                   </div>
                 </div>
               </div>
@@ -444,6 +448,20 @@ export const AppsScriptSetupModal: React.FC<AppsScriptSetupModalProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-500">
                   Tip: Re-registration programme codes can include academic year suffixes (e.g. <code>MCOM 2</code>, <code>BAM 2</code>, <code>BAM 3</code>).
+                </p>
+              </div>
+
+              {/* Users Tab Specification */}
+              <div className="bg-purple-50/70 border border-purple-300 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-purple-950">Users Tab (Staff Authentication & Gatekeeper Access):</span>
+                  <span className="bg-purple-200 text-purple-900 font-mono text-[10px] px-2 py-0.5 rounded-full font-bold">Tab: Users or Sheet_Users</span>
+                </div>
+                <div className="p-2.5 bg-white border border-purple-200 rounded-lg font-mono text-[11px] text-purple-950 leading-relaxed overflow-x-auto">
+                  Username · Password · Role (admin / desk) · Full_Name · Status (active / inactive) · Email
+                </div>
+                <p className="text-[11px] text-purple-800 leading-relaxed">
+                  ✓ <strong>Live Staff Login:</strong> Passwords configured in this sheet are accepted directly at the Gatekeeper login screen. If you select "Staff Counter" or "Coordinator", the system auto-resolves your authorized role from this sheet.
                 </p>
               </div>
 

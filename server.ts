@@ -626,7 +626,7 @@ app.get("/api/sheets", async (req, res) => {
       },
       cache: "no-store",
       redirect: "follow",
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(35000),
     });
 
     console.log(`[Proxy GET] Apps Script status: ${remoteResponse.status}`);
@@ -641,6 +641,17 @@ app.get("/api/sheets", async (req, res) => {
 
       // Optimistically merge any store.intakes not yet appended to remote Google Sheet
       if (typeof json === 'object' && json !== null) {
+        // Cache sheet users if received from Google Sheets
+        const incomingUsers = json.users || json.Users || json.staffAccounts || json.sheetUsers;
+        if (Array.isArray(incomingUsers) && incomingUsers.length > 0) {
+          store.sheetUsers = incomingUsers;
+          saveStore(store);
+        } else if (store.sheetUsers && (!json.users || json.users.length === 0)) {
+          json.users = store.sheetUsers;
+          json.Users = store.sheetUsers;
+          json.sheetUsers = store.sheetUsers;
+        }
+
         const remoteIntakeList = json.intakeRegister || json.Intake_Register || json.intakes || [];
         const remoteTokenSet = new Set(remoteIntakeList.map((r: any) => String(r.Token_No || r.tokenNo || r.id || '').trim()));
         const remoteEnrSet = new Set(remoteIntakeList.map((r: any) => `${String(r.Enrollment_No || r.enrollmentNo || '').trim()}_${String(r.Session || r.session || '').trim()}`));
@@ -698,19 +709,21 @@ app.get("/api/sheets", async (req, res) => {
         intakes: store.intakes || [],
         courseLedger: store.courseLedger || [],
         studentRegistrations: store.studentRegistrations || [],
+        users: store.sheetUsers || [],
       });
     }
   } catch (error: any) {
-    console.error("[Proxy GET Error]:", error.message);
+    console.warn("[Proxy GET Fallback]:", error.message);
     const store = loadStore();
     return res.status(200).json({
       status: "fallback",
       reachable: false,
       error: error.message,
-      message: error.name === 'TimeoutError' ? 'Google Apps Script timed out (15s exceeded). Using local storage.' : error.message,
+      message: error.name === 'TimeoutError' ? 'Google Apps Script timed out (35s exceeded). Using cached data.' : error.message,
       intakes: store.intakes || [],
       courseLedger: store.courseLedger || [],
       studentRegistrations: store.studentRegistrations || [],
+      users: store.sheetUsers || [],
     });
   }
 });

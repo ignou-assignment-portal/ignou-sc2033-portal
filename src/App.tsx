@@ -136,7 +136,12 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ onViewHome }) => {
 type AppViewMode = 'home' | 'gatekeeper' | 'dashboard';
 
 const MainApp: React.FC = () => {
-  const { isAuthenticated, toastMessage, toastType, hideToast } = useApp();
+  const { isAuthenticated, toastMessage, toastType, hideToast, fetchAllData } = useApp();
+
+  // Eager pre-hydration of Google Sheets data and staff accounts on app mount
+  useEffect(() => {
+    fetchAllData(true);
+  }, [fetchAllData]);
 
   // Route & view mode state
   const [viewMode, setViewMode] = useState<AppViewMode>(() => {

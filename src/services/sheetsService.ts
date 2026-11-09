@@ -126,6 +126,7 @@ export interface HydrationResult {
   reRegistrations?: any[];
   studentRegistrations?: any[];
   availableSessions?: string[];
+  users?: any[];
   source: 'google_sheets' | 'local_cache' | 'offline_fallback';
   message?: string;
   reachable?: boolean;
@@ -276,6 +277,7 @@ export async function doGet(): Promise<HydrationResult> {
         rawRegistrations = [...rawFresh, ...rawReReg];
       }
       const rawAvailableSessions = json.availableSessions || [];
+      const rawUsers = json.users || json.Users || json.staffAccounts || json.sheetUsers || [];
       const isReachable = json.status !== 'fallback';
 
       return {
@@ -287,6 +289,7 @@ export async function doGet(): Promise<HydrationResult> {
         reRegistrations: rawReReg,
         studentRegistrations: rawRegistrations,
         availableSessions: rawAvailableSessions,
+        users: rawUsers,
         source: isReachable ? 'google_sheets' : 'local_cache',
         reachable: isReachable,
         latencyMs: Date.now() - startTime,
@@ -319,6 +322,7 @@ export async function doGet(): Promise<HydrationResult> {
         rawRegistrations = [...rawFresh, ...rawReReg];
       }
       const rawAvailableSessions = data.availableSessions || [];
+      const rawUsers = data.users || data.Users || data.staffAccounts || data.sheetUsers || [];
       return {
         success: true,
         intakes: rawIntakes,
@@ -328,6 +332,7 @@ export async function doGet(): Promise<HydrationResult> {
         reRegistrations: rawReReg,
         studentRegistrations: rawRegistrations,
         availableSessions: rawAvailableSessions,
+        users: rawUsers,
         source: 'google_sheets',
         reachable: true,
         latencyMs: Date.now() - startTime,
@@ -1884,6 +1889,12 @@ function doGet(e) {
   result.evaluatorsMaster = getSheetDataByAliases(ss, ["Evaluators_Master", "evaluatorsMaster", "Evaluators"]);
   result.Evaluators_Master = result.evaluatorsMaster;
 
+  // 1b. Authorized Staff & Users Directory (SC-2033 Terminal Gatekeeper)
+  result.users = getSheetDataByAliases(ss, ["Users", "Sheet_Users", "Users_Master", "Staff_Users", "Staff", "Accounts"]);
+  result.Users = result.users;
+  result.sheetUsers = result.users;
+  result.staffAccounts = result.users;
+
   // 2. Multi-Tab Student Registration Aggregator (Jan 2024 through 2026+)
   var studentRegistrations = [];
   var allSheets = ss.getSheets();
@@ -2238,6 +2249,15 @@ function findSheetByAliases(ss, aliases) {
   for (var i = 0; i < aliases.length; i++) {
     var s = ss.getSheetByName(aliases[i]);
     if (s) return s;
+  }
+  // Case-insensitive and space/underscore-insensitive fallback
+  var allSheets = ss.getSheets();
+  for (var a = 0; a < aliases.length; a++) {
+    var normAlias = String(aliases[a] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (var j = 0; j < allSheets.length; j++) {
+      var normName = String(allSheets[j].getName() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normName === normAlias) return allSheets[j];
+    }
   }
   return null;
 }

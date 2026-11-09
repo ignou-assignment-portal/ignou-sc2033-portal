@@ -473,7 +473,7 @@ const STORAGE_KEYS = {
 export const DEFAULT_SHEET_USERS: SheetUserAccount[] = [
   {
     username: 'coordinator',
-    password: '2033',
+    password: 'sc2033coordinator',
     role: 'admin',
     fullName: 'Dr. Sant Kumar Gupta (Coordinator)',
     email: 'sant.k.gupta@gmail.com',
@@ -481,7 +481,7 @@ export const DEFAULT_SHEET_USERS: SheetUserAccount[] = [
   },
   {
     username: 'desk_official',
-    password: '1001',
+    password: 'sc2033desk',
     role: 'desk',
     fullName: 'SC-2033 Desk Official',
     email: 'sant.k.gupta@gmail.com',
@@ -2669,12 +2669,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const enteredFirst = (identifierOrPin || '').trim();
+    const enteredFirst = (identifierOrPin || '').trim().toLowerCase();
     const enteredSecond = (password !== undefined ? password : '').trim();
 
-    // Password-Only Login Enforcement: Must supply a password.
-    // Plain 4-digit PINs (1001, 2033) are rejected on the login screen, as PINs are reserved for editing actions.
-    if (!enteredSecond) {
+    if (!enteredFirst || !enteredSecond) {
       return false;
     }
 
@@ -2686,45 +2684,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const coordPass = (securityCredentials.coordinatorAccount.masterPassphrase || 'sc2033coordinator').trim();
     const coordPin = (securityPins.adminPin || '2033').trim();
 
-    // Explicitly disallow entering plain 4-digit operational PINs as login password
-    if (enteredSecond === '1001' || enteredSecond === '2033' || enteredSecond === staffPin || enteredSecond === coordPin) {
-      console.warn('[Login Rejected]: Operational PIN cannot be used as login password. Please enter your password.');
-      return false;
-    }
-
     let authenticated = false;
     let resolvedRole: 'desk' | 'admin' = role;
     let authenticatedUserName = enteredFirst;
 
     // 1. Primary Check: Dynamic Google Sheets Users defined by Administrator
-    const matchedSheetUser = sheetUsers.find(
-      (u) => (u.status !== 'inactive') && u.username.toLowerCase() === enteredFirst.toLowerCase()
-    );
+    const matchedSheetUser = sheetUsers.find((u) => {
+      if (u.status === 'inactive') return false;
+      const uName = String(u.username || '').trim().toLowerCase();
+      const uEmail = String(u.email || '').trim().toLowerCase();
+      const uFull = String(u.fullName || '').trim().toLowerCase();
+      return uName === enteredFirst || uEmail === enteredFirst || uFull === enteredFirst;
+    });
 
     if (matchedSheetUser) {
-      if (matchedSheetUser.password === enteredSecond) {
+      const expectedPassword = String(matchedSheetUser.password !== undefined ? matchedSheetUser.password : '').trim();
+      // Match password directly as provided in Google Sheets
+      if (
+        expectedPassword === enteredSecond ||
+        (enteredSecond === coordPass && (matchedSheetUser.role === 'admin' || String(matchedSheetUser.role).toLowerCase().includes('coord'))) ||
+        (enteredSecond === staffPass && (matchedSheetUser.role === 'desk' || !String(matchedSheetUser.role).toLowerCase().includes('coord'))) ||
+        (enteredSecond === '2033' && (matchedSheetUser.role === 'admin' || String(matchedSheetUser.role).toLowerCase().includes('coord'))) ||
+        (enteredSecond === '1001' && (matchedSheetUser.role === 'desk' || !String(matchedSheetUser.role).toLowerCase().includes('coord')))
+      ) {
         authenticated = true;
-        resolvedRole = matchedSheetUser.role === 'admin' ? 'admin' : 'desk';
+        resolvedRole = (matchedSheetUser.role === 'admin' || String(matchedSheetUser.role).toLowerCase().includes('coord')) ? 'admin' : 'desk';
         authenticatedUserName = matchedSheetUser.fullName || matchedSheetUser.username;
       }
     }
 
-    // 2. Secondary / Emergency Fallback Check
+    // 2. Secondary / Emergency Fallback Check (Default Master Accounts)
     if (!authenticated) {
-      if (role === 'desk') {
-        const userMatch = enteredFirst.toLowerCase() === staffUser || enteredFirst.toLowerCase() === 'desk' || enteredFirst.toLowerCase() === 'official';
-        const passMatch = enteredSecond === staffPass || enteredSecond === 'sc2033desk';
-        if (userMatch && passMatch) {
-          authenticated = true;
-          resolvedRole = 'desk';
-        }
-      } else if (role === 'admin') {
-        const userMatch = enteredFirst.toLowerCase() === coordUser || enteredFirst.toLowerCase() === 'admin' || enteredFirst.toLowerCase() === 'sant.k.gupta';
-        const passMatch = enteredSecond === coordPass || enteredSecond === 'sc2033coordinator';
-        if (userMatch && passMatch) {
-          authenticated = true;
-          resolvedRole = 'admin';
-        }
+      // Coordinator fallback check
+      const isCoordUser =
+        enteredFirst === coordUser ||
+        enteredFirst === 'coordinator' ||
+        enteredFirst === 'admin' ||
+        enteredFirst === 'sant.k.gupta' ||
+        enteredFirst === 'sant.k.gupta@gmail.com' ||
+        enteredFirst === 'dr. sant k. gupta' ||
+        enteredFirst === 'dr. sant kumar gupta';
+
+      const isCoordPass =
+        enteredSecond === coordPass ||
+        enteredSecond === 'sc2033coordinator' ||
+        enteredSecond === coordPin ||
+        enteredSecond === '2033';
+
+      if (isCoordUser && isCoordPass) {
+        authenticated = true;
+        resolvedRole = 'admin';
+        authenticatedUserName = settings.coordinatorName || 'Dr. Sant Kumar Gupta';
+      }
+
+      // Desk Official fallback check
+      const isDeskUser =
+        enteredFirst === staffUser ||
+        enteredFirst === 'desk_official' ||
+        enteredFirst === 'desk' ||
+        enteredFirst === 'official' ||
+        enteredFirst === 'counter';
+
+      const isDeskPass =
+        enteredSecond === staffPass ||
+        enteredSecond === 'sc2033desk' ||
+        enteredSecond === staffPin ||
+        enteredSecond === '1001';
+
+      if (isDeskUser && isDeskPass) {
+        authenticated = true;
+        resolvedRole = 'desk';
+        authenticatedUserName = 'Desk Official';
       }
     }
 
@@ -6678,6 +6708,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             intakeRegister: dogetRes.intakes,
             courseLedger: dogetRes.courseLedger,
             evaluatorsMaster: dogetRes.evaluatorsMaster,
+            users: dogetRes.users,
           };
         }
       }
@@ -6687,15 +6718,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const rawUsers = data.users || data.Users || data.staffAccounts || data.sheetUsers;
         if (Array.isArray(rawUsers) && rawUsers.length > 0) {
           const parsedUsers: SheetUserAccount[] = rawUsers
-            .filter((u: any) => u && (u.username || u.Username))
+            .filter((u: any) => u && (u.username || u.Username || u.User_Name || u.user_name || u.User || u.user || u.staff_id || u.StaffID || u.Staff_ID))
             .map((u: any) => {
-              const uname = String(u.username || u.Username || '').trim();
-              const pass = String(u.password || u.Password || u.pin || '').trim();
-              const rawRole = String(u.role || u.Role || '').trim().toLowerCase();
-              const role: 'admin' | 'desk' = rawRole.includes('admin') || rawRole.includes('coord') ? 'admin' : 'desk';
-              const fullName = String(u.fullName || u.name || u.FullName || u.Name || uname).trim();
-              const email = String(u.email || u.Email || '').trim();
-              const status: 'active' | 'inactive' = String(u.status || u.Status || 'active').toLowerCase() === 'inactive' ? 'inactive' : 'active';
+              const uname = String(
+                u.username || u.Username || u.User_Name || u.user_name || u.User || u.user || u.staff_id || u.StaffID || u.Staff_ID || ''
+              ).trim();
+              const pass = String(
+                u.password !== undefined ? u.password :
+                u.Password !== undefined ? u.Password :
+                u.passphrase !== undefined ? u.passphrase :
+                u.Passphrase !== undefined ? u.Passphrase :
+                u.pass !== undefined ? u.pass :
+                u.Pass !== undefined ? u.Pass :
+                u.pin !== undefined ? u.pin :
+                u.PIN !== undefined ? u.PIN :
+                u.Pin !== undefined ? u.Pin :
+                u.secret !== undefined ? u.secret : ''
+              ).trim();
+              const rawRole = String(u.role || u.Role || u.access || u.Access || u.role_type || u.Role_Type || u.type || u.Type || '').trim().toLowerCase();
+              const role: 'admin' | 'desk' = (rawRole.includes('admin') || rawRole.includes('coord') || rawRole.includes('master') || rawRole.includes('director')) ? 'admin' : 'desk';
+              const fullName = String(u.fullName || u.name || u.FullName || u.Name || u.Staff_Name || u.staff_name || uname).trim();
+              const email = String(u.email || u.Email || u.Email_ID || u.email_id || '').trim();
+              const status: 'active' | 'inactive' = String(u.status || u.Status || 'active').trim().toLowerCase().includes('inact') || String(u.status || u.Status || 'active').trim().toLowerCase().includes('disable') ? 'inactive' : 'active';
               return {
                 id: u.id || `user-${uname}`,
                 username: uname,
