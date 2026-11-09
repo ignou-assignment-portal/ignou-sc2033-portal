@@ -2869,7 +2869,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : (trimmed === deskPin || trimmed === adminPin || trimmed === '1001' || trimmed === '2033');
 
     if (isValid) {
-      const expiresAt = Date.now() + 15 * 60 * 1000; // 15-minute sliding window
+      const expiresAt = Date.now() + 20 * 60 * 1000; // 20-minute sliding window
       setEditingSessionUnlockedUntil(expiresAt);
       try {
         sessionStorage.setItem('ignou_sc2033_editing_until', expiresAt.toString());
@@ -2880,7 +2880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
         role: currentRole,
         session: currentSession,
-        summary: '15-minute operational editing authorization granted via PIN verification',
+        summary: '20-minute operational editing authorization granted via PIN verification',
         status: 'SUCCESS',
       });
       return { success: true };

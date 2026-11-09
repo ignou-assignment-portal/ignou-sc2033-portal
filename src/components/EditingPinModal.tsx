@@ -125,13 +125,13 @@ export const EditingPinModal: React.FC = () => {
             )}
           </div>
 
-          {/* 15-Minute Session Policy Notice */}
+          {/* 20-Minute Session Policy Notice */}
           <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex items-start gap-2.5 text-xs text-indigo-950">
             <Clock className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
-              <span className="font-bold block text-[11px]">15-Minute Unlocked Editing Session</span>
+              <span className="font-bold block text-[11px]">20-Minute Unlocked Editing Session</span>
               <p className="text-[11px] text-indigo-900 leading-relaxed">
-                Entering your 4-digit PIN grants you continuous editing access for <strong>15 minutes</strong> across all forms, marks, and ledger controls without prompting again.
+                Entering your 4-digit PIN grants you continuous editing access for <strong>20 minutes</strong> across all forms, marks, and ledger controls without prompting again.
               </p>
             </div>
           </div>
@@ -198,7 +198,7 @@ export const EditingPinModal: React.FC = () => {
                 }`}
               >
                 <Lock className="w-3.5 h-3.5" />
-                <span>Verify & Unlock (15m)</span>
+                <span>Verify & Unlock (20m)</span>
               </button>
             </div>
           </form>

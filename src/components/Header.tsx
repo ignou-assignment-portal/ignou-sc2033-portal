@@ -47,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
   const [newSessionInput, setNewSessionInput] = useState('');
   const [editingRemainingSeconds, setEditingRemainingSeconds] = useState<number>(0);
 
-  // 15-minute Editing step-up countdown tracker
+  // 20-minute Editing step-up countdown tracker
   useEffect(() => {
     if (!editingSessionUnlockedUntil) {
       setEditingRemainingSeconds(0);

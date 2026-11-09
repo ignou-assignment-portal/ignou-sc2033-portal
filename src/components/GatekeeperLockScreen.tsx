@@ -30,14 +30,11 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
     settings,
     securityCredentials,
     lockoutState,
-    resetLockout,
-    sheetUsers,
     fetchAllData,
-    isSyncingSheets,
   } = useApp();
 
   const [selectedRole, setSelectedRole] = useState<'desk' | 'admin'>('desk');
-  const [username, setUsername] = useState('desk_official');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,16 +46,12 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
     fetchAllData(true);
   }, [fetchAllData]);
 
-  // Synchronize default username when switching roles
+  // Synchronize role change and reset fields
   const handleRoleChange = (role: 'desk' | 'admin') => {
     setSelectedRole(role);
     setErrorMessage(null);
     setPassword('');
-    if (role === 'desk') {
-      setUsername(securityCredentials?.staffAccount?.username || 'desk_official');
-    } else {
-      setUsername(securityCredentials?.coordinatorAccount?.username || 'coordinator');
-    }
+    setUsername('');
   };
 
   // Cooldown countdown timer when locked out
@@ -292,22 +285,15 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
                     id="terminal-username-input"
                     type="text"
                     disabled={isLockedOut}
-                    placeholder={selectedRole === 'desk' ? 'e.g. desk_official' : 'e.g. coordinator'}
+                    placeholder={selectedRole === 'desk' ? 'Enter staff username' : 'Enter coordinator ID'}
                     value={username}
-                    list="sheet-users-list"
+                    autoComplete="off"
                     onChange={(e) => {
                       setUsername(e.target.value);
                       if (errorMessage) setErrorMessage(null);
                     }}
                     className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-950 border border-zinc-700 rounded-xl text-white font-mono text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:opacity-50"
                   />
-                  <datalist id="sheet-users-list">
-                    {sheetUsers.map((u) => (
-                      <option key={u.username} value={u.username}>
-                        {u.fullName ? `${u.fullName} (${u.role.toUpperCase()})` : u.role.toUpperCase()}
-                      </option>
-                    ))}
-                  </datalist>
                 </div>
               </div>
 
@@ -381,7 +367,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
             {/* Inactivity & Lockout Security Policy Notice */}
             <div className="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-2xl text-center space-y-1">
               <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Login requires <strong>Password only</strong>. Operational 4-digit PIN (<span className="text-amber-400 font-mono">1001</span> Desk / <span className="text-amber-400 font-mono">2033</span> Coordinator) is requested during data editing. Auto-locks after <strong>{securityCredentials?.inactivityTimeoutMinutes || 20} min</strong>.
+                Login requires <strong>Password only</strong>. Operational 4-digit PIN (<span className="text-amber-400 font-mono">1001</span> Desk / <span className="text-amber-400 font-mono">2033</span> Coordinator) is requested during data editing. Auto-locks after <strong>20 min</strong>.
               </p>
             </div>
 
