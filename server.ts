@@ -671,19 +671,41 @@ app.get("/api/sheets", async (req, res) => {
           json.intakes = merged;
         }
 
-        // Optimistically merge courseLedger
+        // Optimistically merge courseLedger with any local updates from store.courseLedger
         const remoteLedgerList = json.courseLedger || json.Course_Ledger || [];
-        const remoteSubIdSet = new Set(remoteLedgerList.map((l: any) => String(l.Sub_ID || l.subId || l.id || '').trim()));
+        const localLedgerMap = new Map((store.courseLedger || []).map((l: any) => [String(l.Sub_ID || l.subId || l.id || '').trim(), l]));
+        
+        const enhancedLedgerList = remoteLedgerList.map((r: any) => {
+          const sId = String(r.Sub_ID || r.subId || r.id || '').trim();
+          const local: any = localLedgerMap.get(sId);
+          if (local) {
+            const hasRemoteEval = r.Allotted_Evaluator && r.Allotted_Evaluator !== 'Unallotted' && String(r.Allotted_Evaluator).trim() !== '';
+            const hasLocalEval = local.Allotted_Evaluator && local.Allotted_Evaluator !== 'Unallotted' && String(local.Allotted_Evaluator).trim() !== '';
+            const hasRemoteMarks = r.Marks !== undefined && r.Marks !== null && r.Marks !== '';
+            const hasLocalMarks = local.Marks !== undefined && local.Marks !== null && local.Marks !== '';
+
+            return {
+              ...r,
+              Allotted_Evaluator: (!hasRemoteEval && hasLocalEval) ? local.Allotted_Evaluator : r.Allotted_Evaluator,
+              Evaluator_Code: (!hasRemoteEval && hasLocalEval) ? (local.Evaluator_Code || '') : r.Evaluator_Code,
+              Marks: (!hasRemoteMarks && hasLocalMarks) ? local.Marks : r.Marks,
+              Grade: (!hasRemoteMarks && hasLocalMarks) ? local.Grade : r.Grade,
+              Status: (!hasRemoteMarks && hasLocalMarks) ? local.Status : ((!hasRemoteEval && hasLocalEval) ? 'Allotted' : r.Status),
+              Is_Locked: (!hasRemoteMarks && hasLocalMarks && local.Is_Locked) ? local.Is_Locked : r.Is_Locked,
+            };
+          }
+          return r;
+        });
+
+        const remoteSubIdSet = new Set(enhancedLedgerList.map((l: any) => String(l.Sub_ID || l.subId || l.id || '').trim()));
         const pendingLedgers = (store.courseLedger || []).filter((loc: any) => {
           const locSubId = String(loc.Sub_ID || loc.subId || loc.id || '').trim();
           return locSubId && !remoteSubIdSet.has(locSubId);
         });
 
-        if (pendingLedgers.length > 0) {
-          const mergedLedger = [...remoteLedgerList, ...pendingLedgers];
-          json.courseLedger = mergedLedger;
-          json.Course_Ledger = mergedLedger;
-        }
+        const mergedLedger = [...enhancedLedgerList, ...pendingLedgers];
+        json.courseLedger = mergedLedger;
+        json.Course_Ledger = mergedLedger;
 
         // Optimistically merge studentRegistrations
         const remoteRegistrations = json.studentRegistrations || json.student_registrations || [];
@@ -918,6 +940,110 @@ app.post("/api/sheets", async (req, res) => {
       }
     } catch (regErr) {
       console.warn("Failed to persist ADD_REGISTRATION to store:", regErr);
+    }
+  }
+
+  // Persist ALLOT_EVALUATOR and BATCH_ALLOT_EVALUATOR in local store
+  if (action === "ALLOT_EVALUATOR" || action === "BATCH_ALLOT_EVALUATOR") {
+    try {
+      const payload = req.body.payload || req.body;
+      const store = loadStore();
+      const itemsToProcess: any[] = [];
+      if (action === "BATCH_ALLOT_EVALUATOR" && Array.isArray(payload.assignments)) {
+        itemsToProcess.push(...payload.assignments);
+      } else if (Array.isArray(payload.subIds) && payload.subIds.length > 1) {
+        for (const sId of payload.subIds) {
+          itemsToProcess.push({
+            subId: sId,
+            evaluator: payload.evaluator || payload.Allotted_Evaluator || "",
+            evaluatorCode: payload.evaluatorCode || "",
+            enrollmentNo: payload.enrollmentNo || "",
+            courseCode: payload.courseCode || "",
+            status: "Allotted",
+          });
+        }
+      } else {
+        itemsToProcess.push(payload);
+      }
+
+      store.courseLedger = (store.courseLedger || []).map((row: any) => {
+        const rowSubId = String(row.Sub_ID || row.subId || "").trim().toUpperCase();
+        const rowEnr = String(row.Enrollment_No || row.enrollmentNo || "").replace(/^'/, '').trim();
+        const rowCourse = String(row.Course_Code || row.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+        const match = itemsToProcess.find((item: any) => {
+          const tSubId = String(item.subId || item.assignmentId || "").trim().toUpperCase();
+          if (tSubId && (rowSubId === tSubId || rowSubId.includes(tSubId) || tSubId.includes(rowSubId))) return true;
+          const tEnr = String(item.enrollmentNo || "").replace(/^'/, '').trim();
+          const tCourse = String(item.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          if (tEnr && tCourse && rowEnr === tEnr && rowCourse === tCourse) return true;
+          return false;
+        });
+
+        if (match) {
+          const evalName = match.evaluator || match.Allotted_Evaluator || match.evaluatorName || "Unallotted";
+          const evalCode = match.evaluatorCode || "";
+          const isUnallot = !evalName || evalName === "Unallotted";
+          return {
+            ...row,
+            Allotted_Evaluator: evalName,
+            allottedEvaluator: evalName,
+            Evaluator_Code: evalCode,
+            evaluatorCode: evalCode,
+            Status: isUnallot ? "Pending Allotment" : "Allotted",
+            status: isUnallot ? "Pending Allotment" : "Allotted",
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return row;
+      });
+      saveStore(store);
+      console.log(`[Store] ${action} mirrored locally for ${itemsToProcess.length} items`);
+    } catch (allotErr) {
+      console.warn("Failed to mirror ALLOT_EVALUATOR to store:", allotErr);
+    }
+  }
+
+  // Persist UPDATE_MARKS in local store
+  if (action === "UPDATE_MARKS" || action === "UPDATE_PRACTICAL_MARKS") {
+    try {
+      const payload = req.body.payload || req.body;
+      const store = loadStore();
+      const tSubId = String(payload.subId || payload.assignmentId || "").trim().toUpperCase();
+      const tEnr = String(payload.enrollmentNo || "").replace(/^'/, '').trim();
+      const tCourse = String(payload.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      const marksVal = payload.marks !== undefined && payload.marks !== null ? payload.marks : "";
+      const gradeVal = payload.grade || "";
+      const isLocked = Boolean(payload.isLocked);
+
+      store.courseLedger = (store.courseLedger || []).map((row: any) => {
+        const rowSubId = String(row.Sub_ID || row.subId || "").trim().toUpperCase();
+        const rowEnr = String(row.Enrollment_No || row.enrollmentNo || "").replace(/^'/, '').trim();
+        const rowCourse = String(row.Course_Code || row.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+        const isMatch = (tSubId && (rowSubId === tSubId || rowSubId.includes(tSubId) || tSubId.includes(rowSubId))) ||
+                        (tEnr && tCourse && rowEnr === tEnr && rowCourse === tCourse);
+
+        if (isMatch) {
+          return {
+            ...row,
+            Marks: marksVal,
+            marks: marksVal,
+            Grade: gradeVal,
+            grade: gradeVal,
+            Status: isLocked ? "Marks Locked" : (marksVal !== "" ? "Evaluated" : row.Status || "Allotted"),
+            status: isLocked ? "Marks Locked" : (marksVal !== "" ? "Evaluated" : row.status || "Allotted"),
+            Is_Locked: isLocked ? "YES" : "NO",
+            isLocked: isLocked,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return row;
+      });
+      saveStore(store);
+      console.log(`[Store] UPDATE_MARKS mirrored locally for ${tSubId || `${tEnr}_${tCourse}`}`);
+    } catch (marksErr) {
+      console.warn("Failed to mirror UPDATE_MARKS to store:", marksErr);
     }
   }
 

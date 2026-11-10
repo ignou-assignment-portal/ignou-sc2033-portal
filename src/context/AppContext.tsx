@@ -929,6 +929,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setCurrentRole('OFFICIAL');
     }
+    if (fetchAllDataRef.current) {
+      fetchAllDataRef.current(false);
+    }
   }, []);
 
   // Audit Trail & Accountability Logs Database State
@@ -2638,11 +2641,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sessionStorage.setItem("ignou_sc2033_role", "admin");
         setIsAdminPinModalOpen(false);
         setAdminPinError(null);
+        if (fetchAllDataRef.current) {
+          fetchAllDataRef.current(false);
+        }
         return true;
       } else {
         setAdminPinError('Invalid Coordinator Credentials. Access denied. Reverting to Desk Official role.');
         setCurrentRole('OFFICIAL');
         setUserRoleState('desk');
+        if (fetchAllDataRef.current) {
+          fetchAllDataRef.current(false);
+        }
         return false;
       }
     },
@@ -2783,7 +2792,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsAuthenticated(true);
       setUserRoleState(resolvedRole);
       setCurrentRole(resolvedRole === 'admin' ? 'ADMIN' : 'OFFICIAL');
-      fetchAllDataRef.current(true);
+      fetchAllDataRef.current(false);
 
       logAuditEvent({
         action: 'USER_LOGIN',
@@ -7841,7 +7850,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        const syncMsg = `Synced (${incomingRegs.length} admissions, ${cleanIntake.length} receipts, ${completeCleanLedger.length} scripts)`;
+        const evalMasterCount = (data.evaluatorsMaster && data.evaluatorsMaster.length > 0) ? data.evaluatorsMaster.length : 30;
+        const syncMsg = `Synced (${cleanIntake.length} intakes, ${completeCleanLedger.length} scripts, ${evalMasterCount} evaluators)`;
         setSyncStatus(syncMsg);
 
         const now = new Date();
@@ -8040,6 +8050,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('offline', handleOffline);
     };
   }, [retryPendingQueue, checkDataIntegrity, showToast]);
+
+  // Periodic background queue retry when online and items are pending
+  useEffect(() => {
+    if (!isOnline || pendingSyncQueue.length === 0) return;
+    const interval = setInterval(() => {
+      retryPendingQueue(false);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOnline, pendingSyncQueue.length, retryPendingQueue]);
 
   const connectionStatus = useMemo((): 'connected' | 'syncing' | 'queued' | 'offline' | 'error' => {
     if (!isOnline) return 'offline';

@@ -9,7 +9,7 @@
 
 export interface SyncQueueItem {
   id: string;
-  type: 'ADD_INTAKE' | 'EDIT_INTAKE' | 'DELETE_INTAKE' | 'UPDATE_MARKS';
+  type: 'ADD_INTAKE' | 'EDIT_INTAKE' | 'DELETE_INTAKE' | 'UPDATE_MARKS' | 'UPDATE_PRACTICAL_MARKS' | 'ALLOT_EVALUATOR' | 'BATCH_ALLOT_EVALUATOR';
   endpoint?: string;
   payload: any;
   createdAt: string;

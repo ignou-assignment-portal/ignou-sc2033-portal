@@ -1016,5 +1016,23 @@
       "createdAt": "2026-07-01T10:00:00.000Z",
       "updatedAt": "2026-07-01T10:00:00.000Z"
     }
+  ],
+  "sheetUsers": [
+    {
+      "Username": "coordinator",
+      "Password": "sc2033coordinator",
+      "Role": "Coordinator (Admin)",
+      "Full Name": "Dr. Sant Kumar Gupta (Coordinator)",
+      "Email": "sant.k.gupta@gmail.com",
+      "Status": "Active"
+    },
+    {
+      "Username": "desk_official",
+      "Password": "sc2033desk",
+      "Role": "Intake Desk Staff",
+      "Full Name": "SC-2033 Desk Official",
+      "Email": "sant.k.gupta@gmail.com",
+      "Status": "Active"
+    }
   ]
 }

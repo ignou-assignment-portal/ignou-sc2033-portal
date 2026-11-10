@@ -52,6 +52,7 @@ export const GatekeeperLockScreen: React.FC<GatekeeperLockScreenProps> = ({ onBa
     setErrorMessage(null);
     setPassword('');
     setUsername('');
+    fetchAllData(true);
   };
 
   // Cooldown countdown timer when locked out

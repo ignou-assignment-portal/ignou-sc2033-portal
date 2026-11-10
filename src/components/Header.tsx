@@ -13,6 +13,7 @@ import {
   Home,
   GraduationCap,
   Layers,
+  RefreshCw,
 } from 'lucide-react';
 import { InstitutionalSeal } from './InstitutionalSeal';
 import { RecentActivity } from './RecentActivity';
@@ -40,6 +41,11 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
     isHeaderCompact,
     editingSessionUnlockedUntil,
     lockEditingSession,
+    allIntakes,
+    allCourseEvaluations,
+    syncGoogleSheets,
+    isSyncingSheets,
+    syncStatus,
   } = useApp();
 
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
@@ -375,6 +381,28 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
               </button>
             </div>
           )}
+
+          {/* Real-time Google Sheets Live Sync Button & Status Badge */}
+          <button
+            id="btn-header-sync-sheets"
+            type="button"
+            onClick={() => syncGoogleSheets(false)}
+            disabled={isSyncingSheets}
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition shadow-2xs cursor-pointer ${
+              isSyncingSheets
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
+            }`}
+            title={`Two-way Google Sheets Sync\n${syncStatus || 'Click to fetch latest data'}`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin text-amber-600' : 'text-emerald-700'}`} />
+            <span className="hidden sm:inline">
+              {isSyncingSheets
+                ? 'Syncing...'
+                : `Sheets (${allIntakes.length} Intakes · ${allCourseEvaluations.length} Scripts)`}
+            </span>
+            <span className="sm:hidden">Sync</span>
+          </button>
 
           {/* Return to Study Centre Home Page */}
           {onViewHome && (

@@ -1183,18 +1183,16 @@ export async function postAllotEvaluator(
       evaluator: allottedEvaluatorVal,
     });
 
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "ALLOT_EVALUATOR",
-        payload: payload,
-      }),
-    });
+    await sendScriptPost(
+      { action: "ALLOT_EVALUATOR", payload },
+      {
+        queueOnFailure: true,
+        type: 'ALLOT_EVALUATOR',
+        summary: `Allot evaluator to ${cleanCourse} (${cleanEnr || cleanSubId})`,
+      }
+    );
   } catch (err) {
-    console.warn("[postAllotEvaluator direct POST fallback]:", err);
-    sendScriptPost({ action: "ALLOT_EVALUATOR", payload }).catch(() => {});
+    console.warn("[postAllotEvaluator error]:", err);
   }
 
   return {
@@ -1248,18 +1246,16 @@ export async function postBatchAllotEvaluator(
 
   try {
     console.log(`[EvaluatorSync:API] Dispatching BATCH_ALLOT_EVALUATOR (${preparedAssignments.length} scripts) to Sheets`);
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "BATCH_ALLOT_EVALUATOR",
-        payload: payload,
-      }),
-    });
+    await sendScriptPost(
+      { action: "BATCH_ALLOT_EVALUATOR", payload },
+      {
+        queueOnFailure: true,
+        type: 'BATCH_ALLOT_EVALUATOR',
+        summary: `Batch allot ${preparedAssignments.length} scripts to evaluators`,
+      }
+    );
   } catch (err) {
-    console.warn("[postBatchAllotEvaluator fallback]:", err);
-    sendScriptPost({ action: "BATCH_ALLOT_EVALUATOR", payload }).catch(() => {});
+    console.warn("[postBatchAllotEvaluator error]:", err);
   }
 
   return {
