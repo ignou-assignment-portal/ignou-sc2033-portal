@@ -31,6 +31,10 @@ import {
 import { PacketDispatchSlipModal, ScriptEntry } from './PacketDispatchSlipModal';
 import { normalizeSessionName } from '../services/sheetsService';
 import { downloadPacketDispatchSlipPDF } from '../services/pdfReportGenerator';
+import {
+  normalizeDiagnosticCourse,
+  normalizeDiagnosticEnrollment,
+} from '../utils/diagnosticConsistencyUtility';
 
 export const CourseLedgerView: React.FC = () => {
   const {
@@ -40,6 +44,7 @@ export const CourseLedgerView: React.FC = () => {
     allIntakes,
     allCourseEvaluations,
     sessionPackets,
+    packets,
     evaluators,
     createPacket,
     updatePacket,
@@ -88,10 +93,10 @@ export const CourseLedgerView: React.FC = () => {
   // Helper to extract candidate scripts received for a given course code
   const getCourseScripts = (courseCode: string, packet?: CoursePacket | null): ScriptEntry[] => {
     if (!courseCode) return [];
-    const normCode = courseCode.trim().toUpperCase();
+    const normCode = normalizeDiagnosticCourse(courseCode);
     const evals = allCourseEvaluations && allCourseEvaluations.length > 0 ? allCourseEvaluations : sessionCourseEvaluations;
     const matched = evals.filter((e) => {
-      const code = (e.courseCode || (e as any).Course_Code || '').trim().toUpperCase();
+      const code = normalizeDiagnosticCourse(e.courseCode || (e as any).Course_Code || '');
       if (code !== normCode) return false;
       if (ledgerScope === 'ALL') return true;
       return normalizeSessionName(e.session || (e as any).Session) === normalizeSessionName(currentSession);
@@ -113,7 +118,7 @@ export const CourseLedgerView: React.FC = () => {
         : sessionIntakes;
       const fromIntakes: ScriptEntry[] = [];
       activeIntakes.forEach((it: any) => {
-        const courses = (it.courseCodes || it.courses || []).map((c: string) => String(c).trim().toUpperCase());
+        const courses = (it.courseCodes || it.courses || []).map((c: string) => normalizeDiagnosticCourse(c));
         if (courses.includes(normCode)) {
           fromIntakes.push({
             sno: fromIntakes.length + 1,
@@ -131,9 +136,11 @@ export const CourseLedgerView: React.FC = () => {
     // If a specific packet is requested, filter strictly to its assigned students or slice
     if (packet) {
       if (Array.isArray(packet.assignedEnrollments) && packet.assignedEnrollments.length > 0) {
-        const enrSet = new Set(packet.assignedEnrollments.map((enr) => String(enr).trim().toUpperCase()));
-        const filtered = allEntries.filter((s) => enrSet.has(s.enrollmentNo.trim().toUpperCase()));
-        return filtered.map((s, idx) => ({ ...s, sno: idx + 1 }));
+        const enrSet = new Set(packet.assignedEnrollments.map((enr) => normalizeDiagnosticEnrollment(enr)));
+        const filtered = allEntries.filter((s) => enrSet.has(normalizeDiagnosticEnrollment(s.enrollmentNo)));
+        if (filtered.length > 0) {
+          return filtered.map((s, idx) => ({ ...s, sno: idx + 1 }));
+        }
       }
       return allEntries.slice(0, packet.scriptCount).map((s, idx) => ({ ...s, sno: idx + 1 }));
     }
@@ -143,10 +150,11 @@ export const CourseLedgerView: React.FC = () => {
 
   // Helper to compute allocation stats for a course and prevent duplicate packet dispatch
   const getCoursePacketStats = (courseCode: string, excludePacketId?: string) => {
-    const normCode = courseCode.trim().toUpperCase();
-    const allScripts = getCourseScripts(normCode);
-    const relevantPackets = sessionPackets.filter(
-      (p) => p.courseCode.trim().toUpperCase() === normCode && p.id !== excludePacketId
+    const normCode = normalizeDiagnosticCourse(courseCode);
+    const allScripts = getCourseScripts(courseCode);
+    const poolPackets = ledgerScope === 'ALL' ? (packets || []) : (sessionPackets || []);
+    const relevantPackets = poolPackets.filter(
+      (p) => normalizeDiagnosticCourse(p.courseCode) === normCode && p.id !== excludePacketId
     );
 
     const alreadyAssignedEnrollments = new Set<string>();
@@ -155,13 +163,13 @@ export const CourseLedgerView: React.FC = () => {
     relevantPackets.forEach((pkt) => {
       packetedCount += pkt.scriptCount;
       if (Array.isArray(pkt.assignedEnrollments)) {
-        pkt.assignedEnrollments.forEach((enr) => alreadyAssignedEnrollments.add(enr.trim().toUpperCase()));
+        pkt.assignedEnrollments.forEach((enr) => alreadyAssignedEnrollments.add(normalizeDiagnosticEnrollment(enr)));
       }
     });
 
     // Unassigned scripts that have NOT been packeted in any active packet
     const unassignedScripts = allScripts.filter(
-      (s) => !alreadyAssignedEnrollments.has(s.enrollmentNo.trim().toUpperCase())
+      (s) => !alreadyAssignedEnrollments.has(normalizeDiagnosticEnrollment(s.enrollmentNo))
     );
 
     const availableCount = Math.max(0, allScripts.length - packetedCount);
@@ -266,13 +274,18 @@ export const CourseLedgerView: React.FC = () => {
       }
     });
 
-    // Attach packets for this session and compute exact unassigned scripts count
-    sessionPackets.forEach((pkt) => {
-      const normPktCode = pkt.courseCode.trim().toUpperCase();
-      if (map.has(normPktCode)) {
-        const item = map.get(normPktCode)!;
-        item.packetsFormed.push(pkt);
-        item.packetedScripts += pkt.scriptCount;
+    // Attach packets for this scope and compute exact unassigned scripts count
+    const poolPackets = ledgerScope === 'ALL' ? (packets || []) : (sessionPackets || []);
+    poolPackets.forEach((pkt) => {
+      const normPktCode = normalizeDiagnosticCourse(pkt.courseCode);
+      for (const [key, item] of map.entries()) {
+        if (normalizeDiagnosticCourse(key) === normPktCode) {
+          if (!item.packetsFormed.some((existing) => existing.id === pkt.id)) {
+            item.packetsFormed.push(pkt);
+            item.packetedScripts += pkt.scriptCount;
+          }
+          break;
+        }
       }
     });
 
@@ -282,7 +295,7 @@ export const CourseLedgerView: React.FC = () => {
     });
 
     return Array.from(map.values()).sort((a, b) => b.totalReceived - a.totalReceived);
-  }, [allIntakes, sessionIntakes, allCourseEvaluations, sessionCourseEvaluations, sessionPackets, ledgerScope]);
+  }, [allIntakes, sessionIntakes, allCourseEvaluations, sessionCourseEvaluations, sessionPackets, packets, ledgerScope]);
 
   // Evaluator lookup helper
   const getEvaluatorInfo = (evId: string | null) => {
@@ -342,30 +355,31 @@ export const CourseLedgerView: React.FC = () => {
     });
   }, [courseLedger, filterProgramme, filterCourseCode, searchQuery, getCourseTitle]);
 
-  // Synchronized Filtered Session Packets
+  // Synchronized Filtered Session / Scope Packets
   const filteredSessionPackets = useMemo(() => {
-    return sessionPackets.filter((pkt) => {
+    const baseList = ledgerScope === 'ALL' ? (packets || []) : (sessionPackets || []);
+    return baseList.filter((pkt) => {
       if (filterProgramme !== 'ALL' && (pkt.programmeCode || '').trim().toUpperCase() !== filterProgramme.trim().toUpperCase()) {
         return false;
       }
-      if (filterCourseCode !== 'ALL' && pkt.courseCode.trim().toUpperCase() !== filterCourseCode.trim().toUpperCase()) {
+      if (filterCourseCode !== 'ALL' && normalizeDiagnosticCourse(pkt.courseCode) !== normalizeDiagnosticCourse(filterCourseCode)) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const pktNoMatch = (pkt.packetNumber || '').toLowerCase().includes(q);
-        const codeMatch = pkt.courseCode.toLowerCase().includes(q);
+        const codeMatch = pkt.courseCode.toLowerCase().includes(q) || normalizeDiagnosticCourse(pkt.courseCode).toLowerCase().includes(q);
         const progMatch = (pkt.programmeCode || '').toLowerCase().includes(q);
         const notesMatch = (pkt.notes || '').toLowerCase().includes(q);
         const ev = evaluators.find((e) => e.id === pkt.evaluatorId);
-        const evMatch = ev ? ev.name.toLowerCase().includes(q) : false;
+        const evMatch = ev ? `${ev.evaluatorName || ev.name} ${ev.evaluatorCode || ''}`.toLowerCase().includes(q) : false;
         if (!pktNoMatch && !codeMatch && !progMatch && !notesMatch && !evMatch) {
           return false;
         }
       }
       return true;
     });
-  }, [sessionPackets, filterProgramme, filterCourseCode, searchQuery, evaluators]);
+  }, [ledgerScope, packets, sessionPackets, filterProgramme, filterCourseCode, searchQuery, evaluators]);
 
   // Filter actions
   const handleProgrammeChange = (prog: string) => {
@@ -458,10 +472,23 @@ export const CourseLedgerView: React.FC = () => {
 
     const courseItem = courseLedger.find((c) => c.courseCode === selectedCourseForPacket);
 
-    // Select only unassigned candidate scripts
-    const unassignedCandidateEnrollments = stats.unassignedScripts
+    // Select unassigned candidate scripts with fallback to all course scripts
+    let candidateEnrollments = stats.unassignedScripts
       .slice(0, scriptCountInput)
       .map((s) => s.enrollmentNo);
+
+    if (candidateEnrollments.length < scriptCountInput) {
+      const allScripts = getCourseScripts(selectedCourseForPacket);
+      const chosenSet = new Set(candidateEnrollments.map((e) => normalizeDiagnosticEnrollment(e)));
+      for (const s of allScripts) {
+        if (candidateEnrollments.length >= scriptCountInput) break;
+        const normE = normalizeDiagnosticEnrollment(s.enrollmentNo);
+        if (!chosenSet.has(normE)) {
+          chosenSet.add(normE);
+          candidateEnrollments.push(s.enrollmentNo);
+        }
+      }
+    }
 
     const createdPkt = createPacket({
       courseCode: selectedCourseForPacket,
@@ -470,7 +497,7 @@ export const CourseLedgerView: React.FC = () => {
       scriptCount: scriptCountInput,
       expectedReturnDate,
       notes: packetNotes.trim() || undefined,
-      assignedEnrollments: unassignedCandidateEnrollments,
+      assignedEnrollments: candidateEnrollments,
     });
 
     // Automatically trigger the printable Dispatch Slip modal immediately with exact assigned candidates
@@ -976,20 +1003,20 @@ export const CourseLedgerView: React.FC = () => {
           <div className="flex items-center gap-2">
             <PackageCheck className="w-4 h-4 text-indigo-600" />
             <h3 className="font-bold text-zinc-900 text-sm">
-              Session Packets Tracking ({currentSession})
+              {ledgerScope === 'ALL' ? 'Course Packets Tracking (All Cycles)' : `Session Packets Tracking (${currentSession})`}
             </h3>
             <span className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-50 text-indigo-900 border border-indigo-200 font-bold">
-              {filteredSessionPackets.length} of {sessionPackets.length} Packets
+              {filteredSessionPackets.length} of {(ledgerScope === 'ALL' ? packets : sessionPackets).length} Packets
             </span>
           </div>
           <span className="text-xs text-zinc-500 font-medium">
-            {filteredSessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} of {sessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
+            {filteredSessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} of {(ledgerScope === 'ALL' ? packets : sessionPackets).reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
           </span>
         </div>
 
-        {sessionPackets.length === 0 ? (
+        {(ledgerScope === 'ALL' ? packets : sessionPackets).length === 0 ? (
           <div className="py-8 text-center text-xs text-zinc-400">
-            No evaluation packets have been created for {currentSession} yet. Form a packet from the ledger above to dispatch scripts to evaluators.
+            No evaluation packets have been created {ledgerScope === 'ALL' ? 'across all cycles yet' : `for ${currentSession} yet`}. Form a packet from the ledger above to dispatch scripts to evaluators.
           </div>
         ) : filteredSessionPackets.length === 0 ? (
           <div className="py-8 text-center text-xs text-zinc-500 space-y-2">

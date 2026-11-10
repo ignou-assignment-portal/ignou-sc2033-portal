@@ -3350,21 +3350,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [courseEvaluations, sessionIntakes, currentSession, packets, evaluators]);
 
   const sessionPackets = useMemo(() => {
-    if (sessionCourseEvaluations.length === 0) {
-      return [];
-    }
-    const activeCourses = new Set(
-      sessionCourseEvaluations.map((c: any) => (c?.courseCode || c?.Course_Code || '').toUpperCase()).filter(Boolean)
-    );
     return (packets || []).filter((p: any) => {
       if (!p) return false;
       if (!currentSession || currentSession === "All" || currentSession.toLowerCase() === "all") return true;
-      return (
-        normalizeSession(p.Session || p.session) === normalizeSession(currentSession) &&
-        activeCourses.has((p.courseCode || p.Course_Code || '').toUpperCase())
-      );
+      const pktSess = normalizeSession(p.Session || p.session || '');
+      const curSess = normalizeSession(currentSession);
+      return !pktSess || !curSess || norm(pktSess) === norm(curSess);
     });
-  }, [packets, currentSession, sessionCourseEvaluations]);
+  }, [packets, currentSession]);
 
   const sessionBills = useMemo(() => {
     return (bills || []).filter((b: any) => {
@@ -6242,8 +6235,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             normalizeDiagnosticCourse(recCourse) === normalizeDiagnosticCourse(normCourse);
 
           if (!courseMatches) return rec;
-          if (recSession && normCurSess && norm(recSession) !== norm(normCurSess)) return rec;
           if (assignedSet.size > 0 && !assignedSet.has(recEnr)) return rec;
+          if (assignedSet.size === 0 && recSession && normCurSess && norm(recSession) !== norm(normCurSess)) return rec;
 
           // Prevent overwriting locked marks unless coordinator
           if (rec.isLocked && currentRole !== 'ADMIN') return rec;
@@ -6359,23 +6352,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return prev;
       });
 
-      // Synchronize with Google Sheets backend with canonical key & log audit trail
+      // Synchronize with Google Sheets backend with atomic batch and audit logging
       if (affectedRecords.length > 0) {
-        affectedRecords.forEach((rec) => {
+        const batchPayload = affectedRecords.map((rec) => {
           const cleanEnr = normalizeDiagnosticEnrollment(rec.enrollmentNo || rec.Enrollment_No);
           const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
           const recSess = rec.session || rec.Session || currentSession;
           const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
-
-          postAllotEvaluator(rec.id, {
-            id: ev ? ev.id : (data.evaluatorId || ''),
-            name: ev ? (ev.evaluatorName || ev.name) : (evalDisplayName || 'Unallotted'),
-            evaluatorCode: ev ? ev.evaluatorCode : '',
-            Allotted_Evaluator: evalDisplayName || 'Unallotted',
-            enrollmentNo: cleanEnr,
-            courseCode: cleanCourse,
-            session: recSess,
-          }).catch((err) => console.warn(err));
 
           logEvaluatorSync({
             source: 'Packet Dispatch',
@@ -6391,7 +6374,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status: 'DISPATCHED',
             details: `Packet created (${newPacket.packetNumber}): Allotted to ${evalDisplayName || 'Unallotted'}`,
           });
+
+          return {
+            subId: rec.id,
+            assignmentId: canonicalKey || rec.id,
+            enrollmentNo: cleanEnr,
+            courseCode: cleanCourse,
+            session: recSess,
+            evaluatorId: ev ? ev.id : (data.evaluatorId || ''),
+            evaluatorName: ev ? (ev.evaluatorName || ev.name) : (evalDisplayName || 'Unallotted'),
+            evaluatorCode: ev ? ev.evaluatorCode : '',
+            Allotted_Evaluator: evalDisplayName || 'Unallotted',
+          };
         });
+
+        postBatchAllotEvaluator(batchPayload).catch((err) =>
+          console.warn('[createPacket] postBatchAllotEvaluator error:', err)
+        );
       }
 
       return newPacket;
@@ -6611,23 +6610,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return prev;
         });
 
-        // Sync newly allotted scripts with Google Sheets
+        // Sync newly allotted scripts with Google Sheets via batch mutation
         if (affectedAllottedRecords.length > 0) {
-          affectedAllottedRecords.forEach((rec) => {
+          const batchPayload = affectedAllottedRecords.map((rec) => {
             const cleanEnr = normalizeDiagnosticEnrollment(rec.enrollmentNo || rec.Enrollment_No);
             const cleanCourse = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
             const recSess = rec.session || rec.Session || currentSession;
             const canonicalKey = normalizeAssignmentKey(rec.id, cleanEnr, cleanCourse, recSess);
-
-            postAllotEvaluator(rec.id, {
-              id: ev ? ev.id : (effectiveEvaluatorId || ''),
-              name: ev ? (ev.evaluatorName || ev.name) : (evalDisplayName || 'Unallotted'),
-              evaluatorCode: ev ? ev.evaluatorCode : '',
-              Allotted_Evaluator: evalDisplayName || 'Unallotted',
-              enrollmentNo: cleanEnr,
-              courseCode: cleanCourse,
-              session: recSess,
-            }).catch((err) => console.warn(err));
 
             logEvaluatorSync({
               source: 'Packet Dispatch',
@@ -6643,7 +6632,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: 'DISPATCHED',
               details: `Packet updated (${currentPkt.packetNumber}): Allotted to ${evalDisplayName || 'Unallotted'}`,
             });
+
+            return {
+              subId: rec.id,
+              assignmentId: canonicalKey || rec.id,
+              enrollmentNo: cleanEnr,
+              courseCode: cleanCourse,
+              session: recSess,
+              evaluatorId: ev ? ev.id : (effectiveEvaluatorId || ''),
+              evaluatorName: ev ? (ev.evaluatorName || ev.name) : (evalDisplayName || 'Unallotted'),
+              evaluatorCode: ev ? ev.evaluatorCode : '',
+              Allotted_Evaluator: evalDisplayName || 'Unallotted',
+            };
           });
+
+          postBatchAllotEvaluator(batchPayload).catch((err) =>
+            console.warn('[updatePacket] postBatchAllotEvaluator error:', err)
+          );
         }
 
         // Sync unallotted scripts with Google Sheets
@@ -7634,6 +7639,128 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return true;
           });
           return [...mergedCleanLedger, ...localPending];
+        });
+
+        // 4. AUTONOMOUS PACKET RECONCILIATION: Synthesize missing packets from allotted scripts in Course_Ledger
+        setPackets((prevPackets) => {
+          let updatedPackets = [...(prevPackets || [])];
+
+          // Group all allotted records in completeCleanLedger by session, courseCode, and evaluator
+          const allottedGroups = new Map<string, {
+            session: string;
+            courseCode: string;
+            programmeCode: string;
+            evaluatorId: string | null;
+            evaluatorName: string;
+            evaluatorCode: string | null;
+            enrollments: string[];
+            earliestDate: string | null;
+          }>();
+
+          completeCleanLedger.forEach((rec: any) => {
+            const evalDisplay = rec.Allotted_Evaluator || rec.allottedEvaluator || '';
+            const hasAllotment = (rec.evaluatorId && rec.evaluatorId !== 'Unallotted') ||
+              (evalDisplay && evalDisplay !== 'Unallotted' && String(evalDisplay).trim() !== '' && !String(evalDisplay).toLowerCase().includes('select'));
+            if (!hasAllotment) return;
+
+            const cCode = (rec.courseCode || rec.Course_Code || '').trim().toUpperCase();
+            const sName = rec.session || rec.Session || currentSession;
+            const pCode = rec.programmeCode || rec.Programme || 'IGNOU';
+            const enr = (rec.enrollmentNo || rec.Enrollment_No || '').trim().toUpperCase();
+            if (!cCode || !enr) return;
+
+            const matchedEv = evaluators.find((e) =>
+              e.id === rec.evaluatorId ||
+              e.evaluatorCode === rec.evaluatorCode ||
+              (rec.evaluatorCode && e.evaluatorCode && e.evaluatorCode.toUpperCase() === rec.evaluatorCode.toUpperCase()) ||
+              `${e.evaluatorName || e.name} (${e.evaluatorCode})` === evalDisplay ||
+              (e.evaluatorName && evalDisplay.includes(e.evaluatorName)) ||
+              (e.name && evalDisplay.includes(e.name))
+            );
+
+            const effectiveEvId = matchedEv?.id || rec.evaluatorId || null;
+            const effectiveEvCode = matchedEv?.evaluatorCode || rec.evaluatorCode || null;
+            const effectiveEvName = matchedEv ? (matchedEv.evaluatorName || matchedEv.name) : evalDisplay;
+
+            const groupKey = `${normalizeSession(sName)}_${normalizeDiagnosticCourse(cCode)}_${effectiveEvId || effectiveEvName}`;
+            if (!allottedGroups.has(groupKey)) {
+              allottedGroups.set(groupKey, {
+                session: sName,
+                courseCode: cCode,
+                programmeCode: pCode,
+                evaluatorId: effectiveEvId,
+                evaluatorName: effectiveEvName,
+                evaluatorCode: effectiveEvCode,
+                enrollments: [],
+                earliestDate: rec.allottedDate || rec.submissionDate || null,
+              });
+            }
+            const grp = allottedGroups.get(groupKey)!;
+            if (!grp.enrollments.includes(enr)) {
+              grp.enrollments.push(enr);
+            }
+          });
+
+          // Match or create packets
+          allottedGroups.forEach((grp) => {
+            const normCourse = normalizeDiagnosticCourse(grp.courseCode);
+            const normSess = normalizeSession(grp.session);
+
+            const existingPkt = updatedPackets.find((p) => {
+              const pCourse = normalizeDiagnosticCourse(p.courseCode);
+              const pSess = normalizeSession(p.session);
+              if (pCourse !== normCourse || pSess !== normSess) return false;
+              if (grp.evaluatorId && p.evaluatorId === grp.evaluatorId) return true;
+              return (p.assignedEnrollments || []).some((e) => grp.enrollments.includes(e.trim().toUpperCase()));
+            });
+
+            if (existingPkt) {
+              const merged = Array.from(new Set([...(existingPkt.assignedEnrollments || []), ...grp.enrollments]));
+              if (merged.length !== (existingPkt.assignedEnrollments || []).length || (!existingPkt.evaluatorId && grp.evaluatorId)) {
+                updatedPackets = updatedPackets.map((pkt) => {
+                  if (pkt.id === existingPkt.id) {
+                    return {
+                      ...pkt,
+                      evaluatorId: grp.evaluatorId || pkt.evaluatorId,
+                      assignedEnrollments: merged,
+                      scriptCount: merged.length,
+                    };
+                  }
+                  return pkt;
+                });
+              }
+            } else {
+              const sessionCode = generateSessionCode(grp.session);
+              const cleanCode = grp.courseCode.replace(/[^a-zA-Z0-9]/g, '');
+              const existingForCourse = updatedPackets.filter(
+                (p) => normalizeSession(p.session) === normSess && normalizeDiagnosticCourse(p.courseCode) === normCourse
+              );
+              const packetNumber = `PKT-${sessionCode}-${cleanCode}-${String(existingForCourse.length + 1).padStart(2, '0')}`;
+              const dateStr = grp.earliestDate || new Date().toISOString().split('T')[0];
+
+              const newPkt: CoursePacket = {
+                id: `pkt-synced-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                session: grp.session,
+                packetNumber,
+                courseCode: grp.courseCode,
+                programmeCode: grp.programmeCode,
+                evaluatorId: grp.evaluatorId,
+                scriptCount: grp.enrollments.length,
+                assignedDate: dateStr,
+                expectedReturnDate: null,
+                returnedDate: null,
+                status: 'Dispatched',
+                notes: `Auto-reconstructed from Course Ledger allotment to ${grp.evaluatorName}`,
+                assignedEnrollments: grp.enrollments,
+              };
+              updatedPackets.push(newPkt);
+            }
+          });
+
+          try {
+            localStorage.setItem(STORAGE_KEYS.PACKETS, JSON.stringify(updatedPackets));
+          } catch {}
+          return updatedPackets;
         });
 
         // Also update Registration Receipts so receipts view has latest entries
