@@ -1,0 +1,812 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 13923
+>>
+stream
+0.5670000000000001 w
+0 G
+0.06 0.09 0.16 rg
+39.6850393700787407 802.2049606299211746 515.9099212598424629 -68.031496062992133 re
+f
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+1. g
+150.9549999999999841 785.1970866141732586 Td
+(INDIRA GANDHI NATIONAL OPEN UNIVERSITY \(IGNOU\)) Tj
+ET
+BT
+/F1 9 Tf
+10.3499999999999996 TL
+1. g
+162.0999999999999659 768.1892125984252289 Td
+(Study Centre SC-2033 | S.D. Jain Girls' College, Dimapur, Nagaland) Tj
+ET
+BT
+/F1 9 Tf
+10.3499999999999996 TL
+1. g
+166.464999999999975 754.0159842519684616 Td
+(Regional Centre: RC-20 Kohima | Assignment Operations Division) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.796 0.835 0.882 rg
+127.7650000000001143 742.6774015748030706 Td
+(STANDARD OPERATING PROCEDURE \(SOP\) | DOCUMENT REF: IGNOU/SC-2033/SOP/PKT-2026) Tj
+ET
+0.95 0.96 0.98 rg
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+45.354330708661422 722.8348818897637784 m
+549.9256692913385223 722.8348818897637784 l
+553.056732439985467 722.8348818897637784 555.5949606299211609 720.2966536998280844 555.5949606299211609 717.1655905511810261 c
+555.5949606299211609 688.819133858267719 l
+555.5949606299211609 685.6880707096206606 552.4638974812742163 683.1498425196849666 549.9256692913385223 683.1498425196849666 c
+45.354330708661422 683.1498425196849666 l
+42.2232675600144063 683.1498425196849666 39.6850393700787407 686.280905668332025 39.6850393700787407 688.819133858267719 c
+39.6850393700787407 717.1655905511810261 l
+39.6850393700787407 720.2966536998280844 42.8161025187257636 722.8348818897637784 45.354330708661422 722.8348818897637784 c
+h
+B
+BT
+/F2 11 Tf
+12.6499999999999986 TL
+0.263 0.22 0.792 rg
+107.9450000000000216 705.8270078740157487 Td
+(COURSE ASSIGNMENT PACKET DISPATCH & EVALUATION LIFECYCLE) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.278 0.333 0.412 rg
+131.0800000000000978 693.0711023622046696 Td
+(Recording, Allotment, Verification & SED Award Protocol \(Formed -> Dispatched -> Evaluated\)) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+39.6850393700787407 671.8112598425196893 Td
+(1. PURPOSE & EXECUTIVE OVERVIEW) Tj
+ET
+BT
+/F1 8 Tf
+9.1999999999999993 TL
+0.2 0.255 0.333 rg
+39.6850393700787407 660.4726771653542983 Td
+(This statutory Standard Operating Procedure governs the intake-to-award evaluation pipeline at Study Centre SC-2033. It establishes the) Tj
+T* (mandatory three-stage protocol for lotting student assignment scripts into physical Course Packets, dispatching them to empanelled Academic) Tj
+T* (Counsellors, logging marks, and transmitting SED award lists to Regional Centre Kohima \(RC-20\).) Tj
+ET
+BT
+/F2 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+39.6850393700787407 620.7876377952754865 Td
+(2. PACKET RECORDING LIFECYCLE MATRIX) Tj
+ET
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+0.12 0.16 0.23 rg
+0.78 G
+0. w
+0.12 0.16 0.23 rg
+39.6850393700787407 615.1183464566928478 68.031496062992133 -19.1999999999999957 re
+f
+BT
+/F2 8 Tf
+9.1999999999999993 TL
+1. g
+44.6850393700787478 603.3183464566928933 Td
+(Stage) Tj
+ET
+0.12 0.16 0.23 rg
+0.78 G
+0. w
+0.12 0.16 0.23 rg
+107.7165354330708738 615.1183464566928478 73.7007874015748143 -19.1999999999999957 re
+f
+BT
+/F2 8 Tf
+9.1999999999999993 TL
+1. g
+112.7165354330708738 603.3183464566928933 Td
+(Packet Status) Tj
+ET
+0.12 0.16 0.23 rg
+0.78 G
+0. w
+0.12 0.16 0.23 rg
+181.4173228346456881 615.1183464566928478 96.3779527559055254 -19.1999999999999957 re
+f
+BT
+/F2 8 Tf
+9.1999999999999993 TL
+1. g
+186.4173228346456881 603.3183464566928933 Td
+(Script Status in Ledger) Tj
+ET
+0.12 0.16 0.23 rg
+0.78 G
+0. w
+0.12 0.16 0.23 rg
+277.7952755905512277 615.1183464566928478 153.0708661417322958 -19.1999999999999957 re
+f
+BT
+/F2 8 Tf
+9.1999999999999993 TL
+1. g
+282.7952755905512277 603.3183464566928933 Td
+(Mandatory Fields Recorded) Tj
+ET
+0.12 0.16 0.23 rg
+0.78 G
+0. w
+0.12 0.16 0.23 rg
+430.866141732283495 615.1183464566928478 124.7244094488189035 -19.1999999999999957 re
+f
+BT
+/F2 8 Tf
+9.1999999999999993 TL
+1. g
+435.866141732283495 603.3183464566928933 Td
+(Physical / Digital Artifact) Tj
+ET
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+39.6850393700787407 595.918346456692916 68.031496062992133 -65.9232283464566819 re
+B
+BT
+/F2 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+46.7716535433070888 582.4567322834645893 Td
+(Stage 1:) Tj
+T* (FORMED) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+107.7165354330708738 595.918346456692916 73.7007874015748143 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+114.8031496062992289 582.4567322834645893 Td
+(Formed) Tj
+T* (\(Lot Sealed\)) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+181.4173228346456881 595.918346456692916 96.3779527559055254 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+188.5039370078740433 582.4567322834645893 Td
+(Pending Allotment) Tj
+T* (\(Script locked to packet\)) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+277.7952755905512277 595.918346456692916 153.0708661417322958 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+284.8818897637795544 582.4567322834645893 Td
+(• Packet Number \(PKT-JUL26-XXX-01\)) Tj
+T* (• Course & Programme Code) Tj
+T* (• Script Count \(Standard 20 scripts\)) Tj
+T* (• Candidate Enrollment IDs) Tj
+T* (• Lot Creation Date) Tj
+T* (• Evaluator: Unallotted) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+430.866141732283495 595.918346456692916 124.7244094488189035 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+437.9527559055118786 582.4567322834645893 Td
+(• Course Packet Label) Tj
+T* (• Internal Inventory Registry) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+39.6850393700787407 529.9951181102361488 68.031496062992133 -65.9232283464566819 re
+B
+BT
+/F2 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+46.7716535433070888 516.5335039370079357 Td
+(Stage 2:) Tj
+T* (DISPATCHED) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+107.7165354330708738 529.9951181102361488 73.7007874015748143 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+114.8031496062992289 516.5335039370079357 Td
+(Dispatched) Tj
+T* (\(With Evaluator\)) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+181.4173228346456881 529.9951181102361488 96.3779527559055254 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+188.5039370078740433 516.5335039370079357 Td
+(Allotted) Tj
+T* (\(Assigned to Counsellor\)) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+277.7952755905512277 529.9951181102361488 153.0708661417322958 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+284.8818897637795544 516.5335039370079357 Td
+(• Empanelled Evaluator Code) Tj
+T* (• Evaluator Name & Mobile) Tj
+T* (• Dispatch / Handover Date) Tj
+T* (• Expected Return Date \(+15 days\)) Tj
+T* (• Handover Mode \(Desk / Post\)) Tj
+T* (• Coordinator Sign-off) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+430.866141732283495 529.9951181102361488 124.7244094488189035 -65.9232283464566819 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+437.9527559055118786 516.5335039370079357 Td
+(• Printable 2-Copy Dispatch Slip) Tj
+T* (  \(1 Study Centre copy, 1 packet) Tj
+T* (copy\)) Tj
+T* (• Google Sheets Course_Ledger) Tj
+T* (row sync) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+39.6850393700787407 464.0718897637795521 68.031496062992133 -57.2982283464566891 re
+B
+BT
+/F2 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+46.7716535433070888 450.6102755905512822 Td
+(Stage 3:) Tj
+T* (EVALUATED) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+107.7165354330708738 464.0718897637795521 73.7007874015748143 -57.2982283464566891 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+114.8031496062992289 450.6102755905512822 Td
+(Evaluated) Tj
+T* (\(Closed Packet\)) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+181.4173228346456881 464.0718897637795521 96.3779527559055254 -57.2982283464566891 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+188.5039370078740433 450.6102755905512822 Td
+(Evaluated /) Tj
+T* (Marks Locked) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+277.7952755905512277 464.0718897637795521 153.0708661417322958 -57.2982283464566891 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+284.8818897637795544 450.6102755905512822 Td
+(• Actual Return Receipt Date) Tj
+T* (• Numeric Marks \(0 - 100\)) Tj
+T* (• IGNOU Grade \(A to E\)) Tj
+T* (• 4-Digit Coordinator Security Lock) Tj
+T* (• Evaluator Honorarium Bill Ref) Tj
+ET
+1. g
+0.78 G
+0.2834645669291339 w
+1. g
+430.866141732283495 464.0718897637795521 124.7244094488189035 -57.2982283464566891 re
+B
+BT
+/F1 7.5 Tf
+8.625 TL
+0.118 0.161 0.231 rg
+437.9527559055118786 450.6102755905512822 Td
+(• SED Continuous Award Sheet) Tj
+T* (• Counsellor Remuneration Bill) Tj
+T* ( \( ¹ 2 5 / s c r i p t \)) Tj
+T* (• Student Portal Online Sync) Tj
+ET
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+0.78 G
+0. w
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+0.8 0.84 0.88 RG
+0.8503937007874016 w
+BT
+/F2 10 Tf
+11.5 TL
+0.059 0.09 0.165 rg
+39.6850393700787407 389.7657874015748689 Td
+(3. DETAILED OPERATIONAL & RECORDING PROCEDURES) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+39.6850393700787407 375.5925590551181585 515.9099212598424629 -68.031496062992133 re
+B
+BT
+/F2 8.5 Tf
+9.7749999999999986 TL
+0.051 0.58 0.533 rg
+48.1889763779527627 362.8366535433071363 Td
+(STAGE 1: PACKET FORMATION & CANDIDATE SCRIPT LOTTING) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 350.080748031496114 Td
+(1. Lotting Threshold: Front counter scripts are bundled in standard lots of 20 candidate scripts \(or remainder pool\).) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 340.159488188976411 Td
+(2. Canonical Packet Number: Generated as PKT-{SESSION_CODE}-{COURSE_CLEAN}-{INDEX} \(e.g. PKT-JUL26-MPS001-01\).) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 330.2382283464567649 Td
+(3. Candidate Deduplication: Each student script enrollment is bound to the packet lot, preventing duplicate dispatch.) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 320.3169685039370052 Td
+(4. Initial State: Status is "Formed", Allotted_Evaluator is "Unallotted", and candidate scripts remain "Pending Allotment".) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+39.6850393700787407 296.2224803149606487 515.9099212598424629 -73.7007874015748143 re
+B
+BT
+/F2 8.5 Tf
+9.7749999999999986 TL
+0.263 0.22 0.792 rg
+48.1889763779527627 283.4665748031496832 Td
+(STAGE 2: COUNSELLOR ALLOTMENT & PHYSICAL DISPATCH) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 270.7106692913386041 Td
+(1. Evaluator Verification: Only empanelled counsellors listed in Evaluators_Master with valid codes are eligible.) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 260.7894094488189012 Td
+(2. Timeline: System calculates Expected Return Date \(+15 days default from date of handover/dispatch\).) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 250.8681496062993119 Td
+(3. Universal Propagation: Immediately updates candidate rows in Evaluation Master, Course Ledger, and Google Sheets.) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 240.946889763779609 Td
+(4. Printable 2-Copy Dispatch Slip: Printed at time of handover. Counsellor signs Copy 1 \(retained by Study Centre Desk\);) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 231.025629921259906 Td
+(   Copy 2 is attached to the physical parcel envelope for the counsellor's grading reference.) Tj
+ET
+0.97 0.98 0.99 rg
+0.89 0.91 0.94 RG
+39.6850393700787407 211.1831102362205002 515.9099212598424629 -73.7007874015748143 re
+B
+BT
+/F2 8.5 Tf
+9.7749999999999986 TL
+0.706 0.325 0.035 rg
+48.1889763779527627 198.4272047244095347 Td
+(STAGE 3: SCRIPT RETURN, MARKS ENTRY & SED AWARD TRANSMISSION) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 185.6712992125984556 Td
+(1. Physical Intake & Verification: Desk staff verify 20 returned scripts against the attached dispatch slip.) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 175.7500393700787527 Td
+(2. Continuous Assessment Grading: Numeric marks \(0-100\) are entered. System auto-calculates letter grades \(A to E\).) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 165.8287795275590497 Td
+(3. Status Lock: Status advances to "Evaluated". Academic Coordinator locks marks with 4-digit PIN against alteration.) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 155.9075196850394605 Td
+(4. Downstream Completion: \(a\) Generates Regional Centre SED Award Sheet; \(b\) Generates Counsellor Honorarium Bill) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.2 0.255 0.333 rg
+48.1889763779527627 145.9862598425197575 Td
+(       a t   s t a t u t o r y   r a t e s   \( ¹ 2 5 / s c r i p t   x   2 0   =   ¹ 5 0 0 \) ;   \( c \)   T r a n s m i t s   e v a l u a t i o n   d a t a   t o   G o o g l e   S h e e t s   C o u r s e _ L e d g e r   p e r m a n e n t l y .) Tj
+ET
+0.8 0.84 0.88 RG
+1.1338582677165356 w
+39.6850393700787407 123.3090944881889897 m
+555.5949606299211609 123.3090944881889897 l
+S
+BT
+/F2 7.5 Tf
+8.625 TL
+0.059 0.09 0.165 rg
+39.6850393700787407 109.1358661417322082 Td
+(PREPARED & VERIFIED BY:) Tj
+ET
+BT
+/F2 7.5 Tf
+8.625 TL
+0.059 0.09 0.165 rg
+325.9864566929133503 109.1358661417322082 Td
+(APPROVED & ISSUED BY:) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.278 0.333 0.412 rg
+39.6850393700787407 83.6240551181101637 Td
+(Assignment Desk In-Charge / Official) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.278 0.333 0.412 rg
+325.9864566929133503 83.6240551181101637 Td
+(Co-ordinator / Assistant Co-ordinator) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.278 0.333 0.412 rg
+39.6850393700787407 73.7027952755904607 Td
+(Study Centre SC-2033 \(Dimapur\)) Tj
+ET
+BT
+/F1 7.5 Tf
+8.625 TL
+0.278 0.333 0.412 rg
+325.9864566929133503 73.7027952755904607 Td
+(IGNOU Study Centre SC-2033 \(S.D. Jain Girls' College\)) Tj
+ET
+BT
+/F1 6.5 Tf
+7.4749999999999996 TL
+0.58 0.639 0.722 rg
+116.0950000000001978 22.6771653543306684 Td
+(Official Statutory Document | IGNOU Study Centre SC-2033 Dimapur, Nagaland | Generated via Assignment Operations Portal) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R ]
+/Count 1
+>>
+endobj
+5 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+6 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+7 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+8 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 5 0 R
+/F2 6 0 R
+/F3 7 0 R
+/F4 8 0 R
+/F5 9 0 R
+/F6 10 0 R
+/F7 11 0 R
+/F8 12 0 R
+/F9 13 0 R
+/F10 14 0 R
+/F11 15 0 R
+/F12 16 0 R
+/F13 17 0 R
+/F14 18 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+19 0 obj
+<<
+/Producer (jsPDF 4.2.1)
+/CreationDate (D:20261110155609-00'00')
+>>
+endobj
+20 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 21
+0000000000 65535 f 
+0000014128 00000 n 
+0000015945 00000 n 
+0000000015 00000 n 
+0000000152 00000 n 
+0000014185 00000 n 
+0000014310 00000 n 
+0000014440 00000 n 
+0000014573 00000 n 
+0000014710 00000 n 
+0000014833 00000 n 
+0000014962 00000 n 
+0000015094 00000 n 
+0000015230 00000 n 
+0000015358 00000 n 
+0000015485 00000 n 
+0000015614 00000 n 
+0000015747 00000 n 
+0000015849 00000 n 
+0000016193 00000 n 
+0000016279 00000 n 
+trailer
+<<
+/Size 21
+/Root 20 0 R
+/Info 19 0 R
+/ID [ <D119F8457BBB5EBAAED9BF653B4F9A22> <D119F8457BBB5EBAAED9BF653B4F9A22> ]
+>>
+startxref
+16383
+%%EOF

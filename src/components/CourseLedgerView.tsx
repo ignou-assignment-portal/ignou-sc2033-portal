@@ -30,7 +30,10 @@ import {
 } from 'lucide-react';
 import { PacketDispatchSlipModal, ScriptEntry } from './PacketDispatchSlipModal';
 import { normalizeSessionName } from '../services/sheetsService';
-import { downloadPacketDispatchSlipPDF } from '../services/pdfReportGenerator';
+import {
+  downloadPacketDispatchSlipPDF,
+  downloadPacketLifecycleSOP_PDF,
+} from '../services/pdfReportGenerator';
 import {
   normalizeDiagnosticCourse,
   normalizeDiagnosticEnrollment,
@@ -662,6 +665,20 @@ export const CourseLedgerView: React.FC = () => {
             </button>
           </div>
 
+          {/* Download Packet Lifecycle SOP Guide PDF */}
+          <button
+            type="button"
+            onClick={() => {
+              downloadPacketLifecycleSOP_PDF();
+              showToast('Official Packet Lifecycle SOP Guide downloaded (PDF)', 'success');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-bold text-xs transition shadow-2xs cursor-pointer"
+            title="Download Official IGNOU SC-2033 Packet Dispatch & Evaluation Lifecycle SOP (PDF)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Packet SOP (PDF)</span>
+          </button>
+
           {/* Autonomous Data Governance: Reconcile Button */}
           <button
             type="button"
@@ -1009,9 +1026,23 @@ export const CourseLedgerView: React.FC = () => {
               {filteredSessionPackets.length} of {(ledgerScope === 'ALL' ? packets : sessionPackets).length} Packets
             </span>
           </div>
-          <span className="text-xs text-zinc-500 font-medium">
-            {filteredSessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} of {(ledgerScope === 'ALL' ? packets : sessionPackets).reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
-          </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-zinc-500 font-medium">
+              {filteredSessionPackets.reduce((sum, p) => sum + p.scriptCount, 0)} of {(ledgerScope === 'ALL' ? packets : sessionPackets).reduce((sum, p) => sum + p.scriptCount, 0)} Scripts Dispatched
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                downloadPacketLifecycleSOP_PDF();
+                showToast('Official Packet Lifecycle SOP Guide downloaded (PDF)', 'success');
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition cursor-pointer"
+              title="Download Packet Dispatch SOP & Lifecycle Guidelines PDF"
+            >
+              <Download className="w-3 h-3" />
+              <span>SOP Guide (PDF)</span>
+            </button>
+          </div>
         </div>
 
         {(ledgerScope === 'ALL' ? packets : sessionPackets).length === 0 ? (
