@@ -975,8 +975,9 @@ app.post("/api/sheets", async (req, res) => {
           const tSubId = String(item.subId || item.assignmentId || "").trim().toUpperCase();
           if (tSubId && (rowSubId === tSubId || rowSubId.includes(tSubId) || tSubId.includes(rowSubId))) return true;
           const tEnr = String(item.enrollmentNo || "").replace(/^'/, '').trim();
-          const tCourse = String(item.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-          if (tEnr && tCourse && rowEnr === tEnr && rowCourse === tCourse) return true;
+          const tCourse = String(item.courseCode || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().replace(/([A-Z]+)0*(\d+)/, '$1$2');
+          const rowNormCourse = rowCourse.replace(/([A-Z]+)0*(\d+)/, '$1$2');
+          if (tEnr && tCourse && rowEnr === tEnr && rowNormCourse === tCourse) return true;
           return false;
         });
 
@@ -1048,16 +1049,22 @@ app.post("/api/sheets", async (req, res) => {
   }
 
   try {
-    const outgoingBody = {
-      action,
+    const bodyPayload = req.body?.payload || {};
+    const assignments = req.body?.assignments || bodyPayload?.assignments || [];
+    const subIds = req.body?.subIds || bodyPayload?.subIds || [];
+    const outgoingBody: any = {
       ...req.body,
+      action,
+      ...(assignments.length ? { assignments } : {}),
+      ...(subIds.length ? { subIds } : {}),
       payload: {
-        ...(req.body?.payload || {}),
-        ...(req.body || {}),
+        ...bodyPayload,
+        ...(assignments.length ? { assignments } : {}),
+        ...(subIds.length ? { subIds } : {}),
       },
     };
 
-    const timeoutMs = action === "REPAIR_COURSE_LEDGER" || action === "BATCH_ALLOT_EVALUATOR" ? 35000 : 18000;
+    const timeoutMs = action === "REPAIR_COURSE_LEDGER" || action === "BATCH_ALLOT_EVALUATOR" || action === "ALLOT_EVALUATOR" ? 45000 : 25000;
     const remoteResponse = await fetch(targetUrl, {
       method: "POST",
       headers: {

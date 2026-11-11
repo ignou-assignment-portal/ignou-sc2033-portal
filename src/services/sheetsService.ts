@@ -177,11 +177,11 @@ export async function sendScriptPost(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000),
     });
     if (proxyRes.ok) {
       const result = await proxyRes.json();
-      if (result && (result.status === 'success' || result.saved || result.message)) {
+      if (result && (result.status === 'success' || result.saved || result.message || result.updatedCount !== undefined)) {
         sent = true;
       }
     }
@@ -199,7 +199,7 @@ export async function sendScriptPost(
           "Content-Type": "text/plain;charset=utf-8",
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(45000),
       });
       sent = true;
     } catch (err) {
@@ -1134,6 +1134,44 @@ export interface AllotEvaluatorPayload {
   evaluator?: string | null;
 }
 
+/**
+ * Canonical course code variant helper (e.g., MPS-1, MPS-001, MPS1, MPS001)
+ */
+export function getCanonicalCourseVariants(courseCode: string): string[] {
+  if (!courseCode) return [];
+  const clean = String(courseCode).trim().toUpperCase();
+  const variants = new Set<string>([clean]);
+  const match = clean.match(/^([A-Za-z]+)[-_]?0*(\d+)$/);
+  if (match) {
+    const prefix = match[1];
+    const num = parseInt(match[2], 10);
+    variants.add(`${prefix}-${num}`);
+    variants.add(`${prefix}-${String(num).padStart(3, '0')}`);
+    variants.add(`${prefix}-${String(num).padStart(2, '0')}`);
+    variants.add(`${prefix}${num}`);
+    variants.add(`${prefix}${String(num).padStart(3, '0')}`);
+  }
+  return Array.from(variants);
+}
+
+/**
+ * Canonical Sub_ID variant helper
+ */
+export function getCanonicalSubIdVariants(subId: string, enrollmentNo: string, courseCode: string, session?: string): string[] {
+  const variants = new Set<string>();
+  if (subId && subId.trim()) variants.add(subId.trim());
+  const enr = String(enrollmentNo || '').replace(/^'/, '').trim();
+  const sessClean = (session || 'July 2026').replace(/\s+/g, '');
+  const courseVars = getCanonicalCourseVariants(courseCode);
+  courseVars.forEach((cv) => {
+    if (enr) {
+      variants.add(`SUB_${enr}_${cv}_${sessClean}`);
+      variants.add(`SUB_${enr}_${cv}`);
+    }
+  });
+  return Array.from(variants);
+}
+
 export async function postAllotEvaluator(
   subId: string,
   evaluator: {
@@ -1154,20 +1192,25 @@ export async function postAllotEvaluator(
   const cleanEnr = (evaluator.enrollmentNo || '').toString().replace(/^'/, '').trim();
   const cleanCourse = (evaluator.courseCode || '').toString().trim().toUpperCase();
   const canonicalKey = normalizeAssignmentKey(cleanSubId, cleanEnr, cleanCourse, evaluator.session);
+  const courseVars = getCanonicalCourseVariants(cleanCourse);
+  const subIdVars = getCanonicalSubIdVariants(cleanSubId, cleanEnr, cleanCourse, evaluator.session);
+  const allSubIds = Array.from(new Set([cleanSubId, canonicalKey, ...subIdVars].filter(Boolean)));
 
   const statusHistory = (evaluator as any)?.statusHistory;
   const payload: any = {
     subId: cleanSubId,
     assignmentId: canonicalKey || cleanSubId,
-    subIds: [cleanSubId, canonicalKey].filter(Boolean),
+    subIds: allSubIds,
     enrollmentNo: cleanEnr,
     courseCode: cleanCourse,
+    courseVariants: courseVars,
     session: evaluator.session || '',
     evaluator: allottedEvaluatorVal,
     evaluatorId: evaluator.id || '',
     evaluatorName: evaluator.name || allottedEvaluatorVal,
     evaluatorCode: evaluator.evaluatorCode || '',
     Allotted_Evaluator: allottedEvaluatorVal,
+    status: 'Allotted',
   };
 
   if (statusHistory) {
@@ -1177,14 +1220,14 @@ export async function postAllotEvaluator(
   try {
     console.log(`[EvaluatorSync:API] Dispatching ALLOT_EVALUATOR to Sheets:`, {
       subId: cleanSubId,
-      canonicalKey,
+      allSubIds,
       enrollmentNo: cleanEnr,
       courseCode: cleanCourse,
       evaluator: allottedEvaluatorVal,
     });
 
     await sendScriptPost(
-      { action: "ALLOT_EVALUATOR", payload },
+      { action: "ALLOT_EVALUATOR", ...payload, payload },
       {
         queueOnFailure: true,
         type: 'ALLOT_EVALUATOR',
@@ -1215,7 +1258,10 @@ export async function postBatchAllotEvaluator(
     Allotted_Evaluator?: string | null;
   }>
 ): Promise<ApiResponse> {
-  const preparedAssignments = allotments.map((a) => {
+  const preparedAssignments: any[] = [];
+  const processedKeys = new Set<string>();
+
+  allotments.forEach((a) => {
     const evalName =
       a.Allotted_Evaluator ||
       (a.evaluatorName && a.evaluatorCode ? `${a.evaluatorName} (${a.evaluatorCode})` : a.evaluatorName || '');
@@ -1223,35 +1269,96 @@ export async function postBatchAllotEvaluator(
     const cleanEnr = (a.enrollmentNo || '').toString().replace(/^'/, '').trim();
     const cleanCourse = (a.courseCode || '').toString().trim().toUpperCase();
     const canonicalKey = normalizeAssignmentKey(cleanSubId, cleanEnr, cleanCourse, a.session);
+    const courseVars = getCanonicalCourseVariants(cleanCourse);
+    const subIdVars = getCanonicalSubIdVariants(cleanSubId, cleanEnr, cleanCourse, a.session);
 
-    return {
-      subId: cleanSubId,
-      assignmentId: canonicalKey || cleanSubId,
-      enrollmentNo: cleanEnr,
-      courseCode: cleanCourse,
-      session: a.session || '',
-      evaluator: evalName,
-      evaluatorId: a.evaluatorId || '',
-      evaluatorName: a.evaluatorName || evalName,
-      evaluatorCode: a.evaluatorCode || '',
-      Allotted_Evaluator: evalName,
-    };
+    // Primary entry
+    const primaryKey = `${cleanSubId}_${cleanEnr}_${cleanCourse}`;
+    if (!processedKeys.has(primaryKey)) {
+      processedKeys.add(primaryKey);
+      preparedAssignments.push({
+        subId: cleanSubId,
+        assignmentId: canonicalKey || cleanSubId,
+        enrollmentNo: cleanEnr,
+        courseCode: cleanCourse,
+        session: a.session || '',
+        evaluator: evalName,
+        evaluatorId: a.evaluatorId || '',
+        evaluatorName: a.evaluatorName || evalName,
+        evaluatorCode: a.evaluatorCode || '',
+        Allotted_Evaluator: evalName,
+        status: 'Allotted',
+      });
+    }
+
+    // Add alternate zero-padded / unpadded variants so Apps Script matches legacy rows
+    courseVars.forEach((cv) => {
+      const altKey = `${cleanEnr}_${cv}`;
+      if (!processedKeys.has(altKey)) {
+        processedKeys.add(altKey);
+        const altSubId = cleanEnr ? `SUB_${cleanEnr}_${cv}_${(a.session || 'July 2026').replace(/\s+/g, '')}` : cleanSubId;
+        preparedAssignments.push({
+          subId: altSubId,
+          assignmentId: altSubId,
+          enrollmentNo: cleanEnr,
+          courseCode: cv,
+          session: a.session || '',
+          evaluator: evalName,
+          evaluatorId: a.evaluatorId || '',
+          evaluatorName: a.evaluatorName || evalName,
+          evaluatorCode: a.evaluatorCode || '',
+          Allotted_Evaluator: evalName,
+          status: 'Allotted',
+        });
+      }
+    });
+
+    subIdVars.forEach((sv) => {
+      if (!processedKeys.has(sv)) {
+        processedKeys.add(sv);
+        preparedAssignments.push({
+          subId: sv,
+          assignmentId: sv,
+          enrollmentNo: cleanEnr,
+          courseCode: cleanCourse,
+          session: a.session || '',
+          evaluator: evalName,
+          evaluatorId: a.evaluatorId || '',
+          evaluatorName: a.evaluatorName || evalName,
+          evaluatorCode: a.evaluatorCode || '',
+          Allotted_Evaluator: evalName,
+          status: 'Allotted',
+        });
+      }
+    });
   });
 
+  const allSubIds = Array.from(new Set(preparedAssignments.map((p) => p.subId).filter(Boolean)));
   const payload = {
+    action: "BATCH_ALLOT_EVALUATOR",
     assignments: preparedAssignments,
-    subIds: preparedAssignments.map((p) => p.subId),
+    subIds: allSubIds,
     count: preparedAssignments.length,
+    payload: {
+      assignments: preparedAssignments,
+      subIds: allSubIds,
+      count: preparedAssignments.length,
+    },
   };
 
   try {
-    console.log(`[EvaluatorSync:API] Dispatching BATCH_ALLOT_EVALUATOR (${preparedAssignments.length} scripts) to Sheets`);
+    console.log(`[EvaluatorSync:API] Dispatching BATCH_ALLOT_EVALUATOR (${allotments.length} original, ${preparedAssignments.length} canonical variants) to Sheets`);
     await sendScriptPost(
-      { action: "BATCH_ALLOT_EVALUATOR", payload },
+      {
+        action: "BATCH_ALLOT_EVALUATOR",
+        assignments: preparedAssignments,
+        subIds: allSubIds,
+        payload,
+      },
       {
         queueOnFailure: true,
         type: 'BATCH_ALLOT_EVALUATOR',
-        summary: `Batch allot ${preparedAssignments.length} scripts to evaluators`,
+        summary: `Batch allot ${allotments.length} scripts to evaluators`,
       }
     );
   } catch (err) {
@@ -1261,7 +1368,7 @@ export async function postBatchAllotEvaluator(
   return {
     status: 'success',
     action: 'BATCH_ALLOT_EVALUATOR',
-    message: `Batch synced ${preparedAssignments.length} evaluator allotments to Google Sheets`,
+    message: `Batch synced ${allotments.length} evaluator allotments (${preparedAssignments.length} variants) to Google Sheets`,
   };
 }
 

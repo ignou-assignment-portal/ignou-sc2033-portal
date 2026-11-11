@@ -291,6 +291,28 @@ interface AppContextType {
   syncEvaluatorsDirectory: () => Promise<void>;
   lastSheetSync: string;
 
+  // Simple & Reliable Two-Way Sync
+  isPullingSheets: boolean;
+  pullStatus: string | null;
+  pullFromSheets: (isSilent?: boolean) => Promise<void>;
+  isPushingSheets: boolean;
+  pushStatus: string | null;
+  pushToSheets: (isSilent?: boolean) => Promise<boolean>;
+  syncRetryPrompt: {
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionName: 'push' | 'pull';
+    onRetry: () => void;
+  } | null;
+  setSyncRetryPrompt: React.Dispatch<React.SetStateAction<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionName: 'push' | 'pull';
+    onRetry: () => void;
+  } | null>>;
+
   // Data Sync Monitor & Offline Parity Engine
   pendingSyncQueue: SyncQueueItem[];
   connectionStatus: 'connected' | 'syncing' | 'queued' | 'offline' | 'error';
@@ -3241,12 +3263,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const basicKey = `${enr}_${code}_${sess}`;
       const subId = String(ce.subId || ce.Sub_ID || ce.id || '').trim();
 
+      const normE = normalizeDiagnosticEnrollment(enr);
+      const cleanCourseNorm = normalizeDiagnosticCourse(code);
+
+      // Look up any active packet allotment in state
+      const matchingPkt = (packets || []).find((p) => {
+        if (p.session && normalizeSession(p.session) !== sess) return false;
+        const pCourseNorm = normalizeDiagnosticCourse(p.courseCode);
+        if (pCourseNorm !== cleanCourseNorm) return false;
+        const pEnrs = (p.assignedEnrollments || []).map((e) => normalizeDiagnosticEnrollment(e));
+        return pEnrs.includes(normE);
+      });
+
+      let finalCe = ce;
+      if (matchingPkt && matchingPkt.evaluatorId && matchingPkt.evaluatorId !== 'Unallotted') {
+        const matchedEv = evaluators.find((e) =>
+          e.id === matchingPkt.evaluatorId ||
+          e.evaluatorCode === matchingPkt.evaluatorId ||
+          `${e.evaluatorName || e.name} (${e.evaluatorCode})` === matchingPkt.evaluatorId ||
+          (e.evaluatorCode && matchingPkt.evaluatorId.includes(e.evaluatorCode))
+        );
+        const evalDisplay = matchedEv
+          ? `${matchedEv.evaluatorName || matchedEv.name} (${matchedEv.evaluatorCode})`
+          : matchingPkt.evaluatorId;
+        const evalCode = matchedEv ? matchedEv.evaluatorCode : ((matchingPkt as any).evaluatorCode || '');
+        const evalName = matchedEv ? (matchedEv.evaluatorName || matchedEv.name) : ((matchingPkt as any).evaluatorName || matchingPkt.evaluatorId);
+
+        const currentMarks = ce.Marks !== undefined && ce.Marks !== null && ce.Marks !== "" ? ce.Marks : (ce.marks !== undefined && ce.marks !== null ? ce.marks : null);
+        const isEvalStatus = currentMarks !== null && currentMarks !== "";
+        const nextStatus = ce.isLocked || ce.Status === 'Marks Locked' || ce.status === 'Marks Locked'
+          ? 'Marks Locked'
+          : isEvalStatus
+          ? 'Evaluated'
+          : 'Allotted';
+
+        finalCe = {
+          ...ce,
+          Allotted_Evaluator: evalDisplay,
+          allottedEvaluator: evalDisplay,
+          Evaluator_Code: evalCode,
+          evaluatorCode: evalCode,
+          evaluatorId: matchedEv ? matchedEv.id : matchingPkt.evaluatorId,
+          evaluatorName: evalName,
+          packetId: matchingPkt.id,
+          packetNumber: matchingPkt.packetNumber,
+          allottedDate: matchingPkt.assignedDate || (matchingPkt as any).createdAt || ce.allottedDate || new Date().toISOString().split('T')[0],
+          dispatchDate: (matchingPkt as any).dispatchDate || matchingPkt.assignedDate || ce.dispatchDate,
+          status: nextStatus,
+          Status: nextStatus,
+        };
+      } else {
+        // Ensure dual-key consistency on existing record
+        const curEval = ce.Allotted_Evaluator || ce.allottedEvaluator || ce.evaluatorName || null;
+        if (curEval && curEval !== 'Unallotted') {
+          finalCe = {
+            ...ce,
+            Allotted_Evaluator: curEval,
+            allottedEvaluator: curEval,
+            Evaluator_Code: ce.Evaluator_Code || ce.evaluatorCode || '',
+            evaluatorCode: ce.Evaluator_Code || ce.evaluatorCode || '',
+            Status: ce.Status || ce.status || 'Allotted',
+            status: ce.status || ce.Status || 'Allotted',
+          };
+        }
+      }
+
       if (!existingKeySet.has(compKey) && !existingKeySet.has(basicKey) && (!subId || !existingKeySet.has(subId))) {
         existingKeySet.add(compKey);
         existingKeySet.add(basicKey);
         if (subId) existingKeySet.add(subId);
-        if (ce.id) existingKeySet.add(String(ce.id).trim());
-        deduplicatedEvalsForSession.push(ce);
+        if (finalCe.id) existingKeySet.add(String(finalCe.id).trim());
+        deduplicatedEvalsForSession.push(finalCe);
       }
     });
 
@@ -8020,6 +8107,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncGoogleSheets = fetchAllData;
 
+  // Simple & Reliable Two-Way Sync Implementation
+  const [isPullingSheets, setIsPullingSheets] = useState<boolean>(false);
+  const [pullStatus, setPullStatus] = useState<string | null>(null);
+
+  const [isPushingSheets, setIsPushingSheets] = useState<boolean>(false);
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [syncRetryPrompt, setSyncRetryPrompt] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionName: 'push' | 'pull';
+    onRetry: () => void;
+  } | null>(null);
+
+  const pullFromSheets = useCallback(async (isSilent = false) => {
+    setIsPullingSheets(true);
+    setPullStatus('Pulling latest data from Google Sheets...');
+    try {
+      await fetchAllData(isSilent);
+      setPullStatus('Synced with Google Sheets');
+    } catch (err: any) {
+      console.warn('[pullFromSheets error]:', err);
+      setPullStatus('Pull delayed. Local data preserved.');
+      setSyncRetryPrompt({
+        isOpen: true,
+        title: 'Google Sheets Pull Delayed',
+        message: 'Google Sheets took longer than expected to respond. All your local records remain safely saved in your browser.',
+        actionName: 'pull',
+        onRetry: () => {
+          setSyncRetryPrompt(null);
+          pullFromSheets(false);
+        },
+      });
+    } finally {
+      setIsPullingSheets(false);
+    }
+  }, [fetchAllData]);
+
+  const pushToSheets = useCallback(async (isSilent = false): Promise<boolean> => {
+    setIsPushingSheets(true);
+    setPushStatus('Pushing records to Google Sheets...');
+    try {
+      // Gather all local records to write through
+      const recordsToPush = courseEvaluations.map((rec) => {
+        const cleanEnr = normalizeDiagnosticEnrollment(rec.enrollmentNo || (rec as any).Enrollment_No);
+        const cleanCourse = (rec.courseCode || (rec as any).Course_Code || '').trim().toUpperCase();
+        const recSess = rec.session || (rec as any).Session || currentSession;
+        const evalName = rec.Allotted_Evaluator || rec.allottedEvaluator || rec.evaluatorName || ((rec.evaluatorCode || (rec as any).Evaluator_Code) ? `Evaluator (${rec.evaluatorCode || (rec as any).Evaluator_Code})` : 'Unallotted');
+        const evalCode = (rec as any).Evaluator_Code || rec.evaluatorCode || '';
+
+        return {
+          subId: rec.id || rec.subId || (rec as any).Sub_ID,
+          enrollmentNo: cleanEnr,
+          courseCode: cleanCourse,
+          session: recSess,
+          evaluator: evalName,
+          evaluatorId: rec.evaluatorId || '',
+          evaluatorName: rec.evaluatorName || evalName,
+          evaluatorCode: evalCode,
+          Allotted_Evaluator: evalName,
+        };
+      });
+
+      if (recordsToPush.length === 0) {
+        if (!isSilent) showToast('No course evaluation records found to push.', 'info');
+        setIsPushingSheets(false);
+        return true;
+      }
+
+      if (!isSilent) {
+        showToast(`Pushing ${recordsToPush.length} ledger records to Google Sheets (Course_Ledger)...`, 'info');
+      }
+
+      // Batch in chunks of 50 records
+      const chunkSize = 50;
+      let totalPushed = 0;
+      for (let i = 0; i < recordsToPush.length; i += chunkSize) {
+        const chunk = recordsToPush.slice(i, i + chunkSize);
+        const res = await postBatchAllotEvaluator(chunk);
+        if (res && res.status === 'success') {
+          totalPushed += chunk.length;
+        }
+      }
+
+      const now = new Date();
+      const formattedDate = `${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+      setLastSheetSync(formattedDate);
+      localStorage.setItem(STORAGE_KEYS.LAST_SHEET_SYNC, formattedDate);
+      setPushStatus(`Saved ${totalPushed} records to Google Sheets`);
+
+      if (!isSilent) {
+        showToast(`Successfully saved ${totalPushed} records to Google Sheets!`, 'success');
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('[pushToSheets error]:', err);
+      setPushStatus('Save delayed. Local data preserved.');
+      setSyncRetryPrompt({
+        isOpen: true,
+        title: 'Google Sheets Save Delayed',
+        message: 'Google Sheets took longer than expected or encountered a network delay. Your records are safely saved in local storage. Would you like to retry pushing now?',
+        actionName: 'push',
+        onRetry: () => {
+          setSyncRetryPrompt(null);
+          pushToSheets(false);
+        },
+      });
+      return false;
+    } finally {
+      setIsPushingSheets(false);
+    }
+  }, [courseEvaluations, currentSession, showToast]);
+
   const [isSyncingEvaluators, setIsSyncingEvaluators] = useState<boolean>(false);
 
   const syncEvaluatorsDirectory = useCallback(async () => {
@@ -9774,6 +9974,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSyncingEvaluators,
         syncEvaluatorsDirectory,
         lastSheetSync,
+        // Simple & Reliable Two-Way Sync
+        isPullingSheets,
+        pullStatus,
+        pullFromSheets,
+        isPushingSheets,
+        pushStatus,
+        pushToSheets,
+        syncRetryPrompt,
+        setSyncRetryPrompt,
         // Data Sync Monitor & Offline Parity Engine
         pendingSyncQueue,
         connectionStatus,

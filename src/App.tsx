@@ -24,6 +24,7 @@ import { GatekeeperLockScreen } from './components/GatekeeperLockScreen';
 import { StudyCentreHomePage } from './components/StudyCentreHomePage';
 import { QuickActionBar } from './components/QuickActionBar';
 import { Toast } from './components/Toast';
+import { SheetsSyncRetryModal } from './components/SheetsSyncRetryModal';
 
 interface DashboardContentProps {
   onViewHome: () => void;
@@ -136,7 +137,17 @@ const DashboardContent: React.FC<DashboardContentProps> = ({ onViewHome }) => {
 type AppViewMode = 'home' | 'gatekeeper' | 'dashboard';
 
 const MainApp: React.FC = () => {
-  const { isAuthenticated, toastMessage, toastType, hideToast, fetchAllData } = useApp();
+  const {
+    isAuthenticated,
+    toastMessage,
+    toastType,
+    hideToast,
+    fetchAllData,
+    syncRetryPrompt,
+    setSyncRetryPrompt,
+    isPushingSheets,
+    isPullingSheets,
+  } = useApp();
 
   // Eager pre-hydration of Google Sheets data and staff accounts on app mount
   useEffect(() => {
@@ -220,6 +231,17 @@ const MainApp: React.FC = () => {
       <StudentSearchModal />
       <AdminPinModal />
       <EditingPinModal />
+
+      {/* Google Sheets Sync Delay & Retry Modal */}
+      <SheetsSyncRetryModal
+        isOpen={Boolean(syncRetryPrompt?.isOpen)}
+        title={syncRetryPrompt?.title || ''}
+        message={syncRetryPrompt?.message || ''}
+        actionName={syncRetryPrompt?.actionName || 'push'}
+        onRetry={() => syncRetryPrompt?.onRetry()}
+        onDismiss={() => setSyncRetryPrompt(null)}
+        isRetrying={isPushingSheets || isPullingSheets}
+      />
 
       {/* Global Toast Notification */}
       <Toast message={toastMessage} type={toastType} onClose={hideToast} />

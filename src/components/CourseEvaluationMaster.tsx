@@ -33,6 +33,8 @@ import {
   AlertTriangle,
   Check,
   X,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 export const CourseEvaluationMaster: React.FC = () => {
@@ -60,6 +62,11 @@ export const CourseEvaluationMaster: React.FC = () => {
     requireEditingAuth,
     resyncAllAllottedEvaluatorsToSheets,
     repairAndRealignCourseLedger,
+    pullFromSheets,
+    isPullingSheets,
+    pushToSheets,
+    isPushingSheets,
+    lastSheetSync,
   } = useApp();
 
   const [isResyncingLedger, setIsResyncingLedger] = useState(false);
@@ -470,60 +477,28 @@ export const CourseEvaluationMaster: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Pull from Sheets (Google Sheets -> Web App) */}
             <button
-              onClick={() => syncGoogleSheets(false)}
-              disabled={isSyncingSheets}
-              id="sync-sheets-stage2-btn"
-              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
-              title="Sync Stage 2 Course Ledger with Google Sheets Backend"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin text-emerald-600' : 'text-emerald-700'}`} />
-              <span>{isSyncingSheets ? 'Syncing Sheets...' : 'Sync Sheets'}</span>
-            </button>
-
-            <button
-              onClick={syncEvaluatorsDirectory}
-              disabled={isSyncingEvaluators}
-              id="sync-evaluators-stage2-btn"
-              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
-              title="Reload latest Academic Counsellors / Evaluators Master Directory from Google Sheets"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingEvaluators ? 'animate-spin text-indigo-600' : 'text-indigo-700'}`} />
-              <span>{isSyncingEvaluators ? 'Syncing Evaluators...' : 'Sync Evaluators Directory'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                requireEditingAuth('Repair Course Ledger Parity', async () => {
-                  setIsResyncingLedger(true);
-                  try {
-                    await resyncAllAllottedEvaluatorsToSheets();
-                  } finally {
-                    setIsResyncingLedger(false);
-                  }
-                }, 'Re-syncing evaluator allotments and marks to Google Sheets Course_Ledger requires operational PIN verification.');
-              }}
-              disabled={isResyncingLedger}
-              id="resync-ledger-parity-btn"
-              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
-              title="Resend all allotted academic counsellors and marks to Google Sheets Course_Ledger to guarantee row parity"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isResyncingLedger ? 'animate-spin text-amber-700' : 'text-amber-800'}`} />
-              <span>{isResyncingLedger ? 'Repairing Ledger...' : 'Repair Ledger Parity'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setRepairResult(null);
-                setIsRepairModalOpen(true);
-              }}
-              disabled={isRepairingLedger}
-              id="repair-columns-modal-btn"
+              onClick={() => pullFromSheets(false)}
+              disabled={isPullingSheets || isPushingSheets}
+              id="pull-sheets-stage2-btn"
               className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
-              title="Verify and repair shifted columns in Google Sheets Course_Ledger (17-column layout alignment)"
+              title={`Pull latest records from Google Sheets\nLast synced: ${lastSheetSync || 'Never'}`}
             >
-              <Wrench className={`w-3.5 h-3.5 ${isRepairingLedger ? 'animate-spin text-emerald-700' : 'text-emerald-800'}`} />
-              <span>{isRepairingLedger ? 'Repairing Columns...' : 'Repair Shifted Columns'}</span>
+              <Download className={`w-3.5 h-3.5 ${isPullingSheets ? 'animate-bounce text-emerald-600' : 'text-emerald-700'}`} />
+              <span>{isPullingSheets ? 'Pulling from Sheets...' : 'Pull from Sheets'}</span>
+            </button>
+
+            {/* Push to Sheets (Web App -> Google Sheets) */}
+            <button
+              onClick={() => pushToSheets(false)}
+              disabled={isPullingSheets || isPushingSheets}
+              id="push-sheets-stage2-btn"
+              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50 pointer-events-auto min-h-[38px]"
+              title="Save all local evaluator allotments, packets, and marks to Google Sheets (Course_Ledger)"
+            >
+              <Upload className={`w-3.5 h-3.5 ${isPushingSheets ? 'animate-pulse text-indigo-600' : 'text-indigo-700'}`} />
+              <span>{isPushingSheets ? 'Pushing to Sheets...' : 'Push to Sheets'}</span>
             </button>
 
             <button

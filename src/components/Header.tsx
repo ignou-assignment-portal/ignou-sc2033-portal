@@ -14,6 +14,8 @@ import {
   GraduationCap,
   Layers,
   RefreshCw,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { InstitutionalSeal } from './InstitutionalSeal';
 import { RecentActivity } from './RecentActivity';
@@ -46,6 +48,13 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
     syncGoogleSheets,
     isSyncingSheets,
     syncStatus,
+    pullFromSheets,
+    isPullingSheets,
+    pullStatus,
+    pushToSheets,
+    isPushingSheets,
+    pushStatus,
+    lastSheetSync,
   } = useApp();
 
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
@@ -382,27 +391,48 @@ export const Header: React.FC<HeaderProps> = ({ onViewHome, onNavigateTab }) => 
             </div>
           )}
 
-          {/* Real-time Google Sheets Live Sync Button & Status Badge */}
-          <button
-            id="btn-header-sync-sheets"
-            type="button"
-            onClick={() => syncGoogleSheets(false)}
-            disabled={isSyncingSheets}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition shadow-2xs cursor-pointer ${
-              isSyncingSheets
-                ? 'bg-amber-50 border-amber-300 text-amber-900'
-                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
-            }`}
-            title={`Two-way Google Sheets Sync\n${syncStatus || 'Click to fetch latest data'}`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheets ? 'animate-spin text-amber-600' : 'text-emerald-700'}`} />
-            <span className="hidden sm:inline">
-              {isSyncingSheets
-                ? 'Syncing...'
-                : `Sheets (${allIntakes.length} Intakes · ${allCourseEvaluations.length} Scripts)`}
-            </span>
-            <span className="sm:hidden">Sync</span>
-          </button>
+          {/* Two-Way Google Sheets Sync Controls: Pull & Push */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            {/* Pull from Sheets (Google Sheets -> Web App) */}
+            <button
+              id="btn-header-pull-sheets"
+              type="button"
+              onClick={() => pullFromSheets(false)}
+              disabled={isPullingSheets || isPushingSheets}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
+                isPullingSheets
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-white hover:bg-emerald-50 text-emerald-900 hover:text-emerald-950 border border-slate-200 hover:border-emerald-300 shadow-2xs'
+              }`}
+              title={`Pull from Sheets (Google Sheets → Web App)\nFetch latest intakes, ledger, and evaluators.\nLast synced: ${lastSheetSync || 'Never'}`}
+            >
+              <Download className={`w-3.5 h-3.5 ${isPullingSheets ? 'animate-bounce text-amber-600' : 'text-emerald-700'}`} />
+              <span className="hidden sm:inline">
+                {isPullingSheets ? 'Pulling...' : 'Pull from Sheets'}
+              </span>
+              <span className="sm:hidden">Pull</span>
+            </button>
+
+            {/* Push to Sheets (Web App -> Google Sheets) */}
+            <button
+              id="btn-header-push-sheets"
+              type="button"
+              onClick={() => pushToSheets(false)}
+              disabled={isPullingSheets || isPushingSheets}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
+                isPushingSheets
+                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                  : 'bg-white hover:bg-indigo-50 text-indigo-900 hover:text-indigo-950 border border-slate-200 hover:border-indigo-300 shadow-2xs'
+              }`}
+              title="Push to Sheets (Web App → Google Sheets)\nSave all evaluator allotments, packets, and marks to Google Sheets (Course_Ledger)"
+            >
+              <Upload className={`w-3.5 h-3.5 ${isPushingSheets ? 'animate-pulse text-amber-600' : 'text-indigo-700'}`} />
+              <span className="hidden sm:inline">
+                {isPushingSheets ? 'Pushing...' : 'Push to Sheets'}
+              </span>
+              <span className="sm:hidden">Push</span>
+            </button>
+          </div>
 
           {/* Return to Study Centre Home Page */}
           {onViewHome && (
