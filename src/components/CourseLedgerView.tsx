@@ -57,6 +57,7 @@ export const CourseLedgerView: React.FC = () => {
     reconcileIntakeAndCourseLedger,
     getCourseTitle,
     settings,
+    requireEditingAuth,
   } = useApp();
 
   const [ledgerScope, setLedgerScope] = useState<'ALL' | 'SESSION'>('ALL');
@@ -524,14 +525,19 @@ export const CourseLedgerView: React.FC = () => {
 
   // Open Edit Packet Modal
   const handleOpenEditModal = (pkt: CoursePacket) => {
-    if (!isAdmin) return;
-    setEditingPacket(pkt);
-    setEditEvaluatorId(pkt.evaluatorId || '');
-    setEditScriptCount(pkt.scriptCount);
-    setEditExpectedReturnDate(pkt.expectedReturnDate || '');
-    setEditPacketNotes(pkt.notes || '');
-    setEditPacketStatus(pkt.status);
-    setIsEditModalOpen(true);
+    requireEditingAuth(
+      `Edit Packet Allotment: ${pkt.packetNumber}`,
+      () => {
+        setEditingPacket(pkt);
+        setEditEvaluatorId(pkt.evaluatorId || '');
+        setEditScriptCount(pkt.scriptCount);
+        setEditExpectedReturnDate(pkt.expectedReturnDate || '');
+        setEditPacketNotes(pkt.notes || '');
+        setEditPacketStatus(pkt.status);
+        setIsEditModalOpen(true);
+      },
+      'Personal PIN or Master Passphrase verification required to modify evaluator packet allotment.'
+    );
   };
 
   // Submit Edit Packet
@@ -591,9 +597,14 @@ export const CourseLedgerView: React.FC = () => {
 
   // Open Delete Confirmation Modal
   const handleOpenDeleteModal = (pkt: CoursePacket) => {
-    if (!isAdmin) return;
-    setPacketToDelete(pkt);
-    setIsDeleteModalOpen(true);
+    requireEditingAuth(
+      `Delete Evaluation Packet: ${pkt.packetNumber}`,
+      () => {
+        setPacketToDelete(pkt);
+        setIsDeleteModalOpen(true);
+      },
+      'Personal PIN or Master Passphrase verification required to delete evaluation packet and unassign scripts.'
+    );
   };
 
   // Confirm Delete Packet and return scripts back to unassigned pool

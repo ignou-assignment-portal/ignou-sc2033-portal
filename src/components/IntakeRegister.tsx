@@ -39,6 +39,7 @@ export const IntakeRegister: React.FC = () => {
     verifyAndSetAdminRole,
     showToast,
     reconcileIntakeAndCourseLedger,
+    requireEditingAuth,
   } = useApp();
 
   const [viewScope, setViewScope] = useState<'ALL' | 'SESSION'>('ALL');
@@ -69,19 +70,35 @@ export const IntakeRegister: React.FC = () => {
   };
 
   const handleEditClick = (record: any) => {
-    setEditingRecord(record);
+    const candName = record.Candidate_Name || record.candidateName || record["Candidate Name"] || record.studentName || '-';
+    const enr = record.Enrollment_No || record.enrollmentNo || record["Enrollment No"] || '-';
+    requireEditingAuth(
+      `Edit Intake: ${candName} (${enr})`,
+      () => {
+        setEditingRecord(record);
+      },
+      'Personal PIN verification required to edit candidate details or registered courses.'
+    );
   };
 
   const handleQuickDateClick = (record: any) => {
-    const initialDate = normalizeDateInput(
-      record.submissionDate ||
-      record.receiptDate ||
-      record.Submission_Date ||
-      record.Timestamp ||
-      record.createdAt
+    const candName = record.Candidate_Name || record.candidateName || record["Candidate Name"] || record.studentName || '-';
+    const enr = record.Enrollment_No || record.enrollmentNo || record["Enrollment No"] || '-';
+    requireEditingAuth(
+      `Modify Intake Date: ${candName} (${enr})`,
+      () => {
+        const initialDate = normalizeDateInput(
+          record.submissionDate ||
+          record.receiptDate ||
+          record.Submission_Date ||
+          record.Timestamp ||
+          record.createdAt
+        );
+        setQuickDateValue(initialDate);
+        setQuickDateModalRecord(record);
+      },
+      'Personal PIN verification required to adjust official intake timestamp.'
     );
-    setQuickDateValue(initialDate);
-    setQuickDateModalRecord(record);
   };
 
   const handleQuickDateSubmit = async (e: React.FormEvent) => {
@@ -98,23 +115,7 @@ export const IntakeRegister: React.FC = () => {
     const enr = record.Enrollment_No || record.enrollmentNo || record["Enrollment No"] || '-';
     const activeSession = record.Session || record.session || currentSession;
 
-    // 1. Access Guard: Require Coordinator Mode (PIN 2033) for Delete actions
-    if (!isAdmin) {
-      const enteredPin = window.prompt('Coordinator PIN Required: Enter PIN 2033 to authorize deletion of intake records:');
-      if (!enteredPin) return;
-      if (enteredPin.trim() === '2033') {
-        const authorized = verifyAndSetAdminRole('2033');
-        if (!authorized) {
-          showToast('Coordinator PIN verification failed.', 'error');
-          return;
-        }
-      } else {
-        showToast('Unauthorized: Incorrect Coordinator PIN.', 'error');
-        return;
-      }
-    }
-
-    // 2. Check if any course for this student in courseLedger has status === "Locked" or isLocked
+    // Check if any course for this student in courseLedger has status === "Locked" or isLocked
     const isAnyCourseLocked = allCourseEvaluations.some(
       (ce) =>
         (ce.intakeId === record.id || ce.enrollmentNo.trim() === String(enr).trim()) &&
@@ -127,15 +128,14 @@ export const IntakeRegister: React.FC = () => {
       return;
     }
 
-    // 3. Confirmation dialog allowing users to delete mistakes made during intake
-    const confirmed = window.confirm(
-      `Delete Intake Entry?\n\nAre you sure you want to delete intake record for ${candName} (${enr})?\n\nThis will completely purge the intake record and cascade cleanup across Course Ledger, Receipts, and Submissions.`
+    requireEditingAuth(
+      `Delete Intake: ${candName} (${enr})`,
+      () => {
+        deleteIntakeRecord(record.id);
+        showToast(`Intake record for ${candName} (${enr}) deleted successfully.`, 'success');
+      },
+      'Personal PIN or Master Passphrase verification required to permanently delete an assignment intake record.'
     );
-
-    if (confirmed) {
-      deleteIntakeRecord(record.id);
-      showToast(`Intake record for ${candName} (${enr}) deleted successfully.`, 'success');
-    }
   };
 
   const normalizeSession = (s: any) => norm(s);

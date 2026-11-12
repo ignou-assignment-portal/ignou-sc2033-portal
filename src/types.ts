@@ -573,6 +573,7 @@ export interface SheetUserAccount {
   username: string;
   password: string;
   role: 'admin' | 'desk';
+  pin?: string;
   fullName?: string;
   email?: string;
   status?: 'active' | 'inactive';

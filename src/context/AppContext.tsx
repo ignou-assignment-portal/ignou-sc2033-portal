@@ -451,6 +451,7 @@ interface AppContextType {
 
   // Google Sheets Users & Staff Access
   sheetUsers: SheetUserAccount[];
+  currentUserAccount: SheetUserAccount | null;
   saveSheetUser: (user: SheetUserAccount) => Promise<void>;
   deleteSheetUser: (username: string) => Promise<void>;
 
@@ -504,6 +505,7 @@ export const DEFAULT_SHEET_USERS: SheetUserAccount[] = [
     username: 'coordinator',
     password: 'sc2033coordinator',
     role: 'admin',
+    pin: '2033',
     fullName: 'Dr. Sant Kumar Gupta (Coordinator)',
     email: 'sant.k.gupta@gmail.com',
     status: 'active',
@@ -512,6 +514,7 @@ export const DEFAULT_SHEET_USERS: SheetUserAccount[] = [
     username: 'desk_official',
     password: 'sc2033desk',
     role: 'desk',
+    pin: '1001',
     fullName: 'SC-2033 Desk Official',
     email: 'sant.k.gupta@gmail.com',
     status: 'active',
@@ -873,6 +876,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [sheetUsers]);
 
+  const [currentUserAccount, setCurrentUserAccount] = useState<SheetUserAccount | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('ignou_sc2033_current_user');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return null;
+  });
+
   const [lastDiscrepancyReport, setLastDiscrepancyReport] = useState<DiscrepancyReport | null>(null);
 
   // Granular Role-Based Access Control (RBAC) Governance State
@@ -1101,6 +1112,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     sessionStorage.removeItem("ignou_sc2033_auth");
     sessionStorage.removeItem("ignou_sc2033_role");
     sessionStorage.removeItem("ignou_sc2033_editing_until");
+    sessionStorage.removeItem("ignou_sc2033_current_user");
+    setCurrentUserAccount(null);
     setEditingSessionUnlockedUntil(null);
     setIsAuthenticated(false);
     logAuditEvent({
@@ -2725,6 +2738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let authenticated = false;
     let resolvedRole: 'desk' | 'admin' = role;
     let authenticatedUserName = enteredFirst;
+    let authenticatedUserAccount: SheetUserAccount | null = null;
 
     // 1. Primary Check: Dynamic Google Sheets Users defined by Administrator
     const matchedSheetUser = sheetUsers.find((u) => {
@@ -2748,6 +2762,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authenticated = true;
         resolvedRole = (matchedSheetUser.role === 'admin' || String(matchedSheetUser.role).toLowerCase().includes('coord')) ? 'admin' : 'desk';
         authenticatedUserName = matchedSheetUser.fullName || matchedSheetUser.username;
+        authenticatedUserAccount = matchedSheetUser;
       }
     }
 
@@ -2773,6 +2788,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authenticated = true;
         resolvedRole = 'admin';
         authenticatedUserName = settings.coordinatorName || 'Dr. Sant Kumar Gupta';
+        authenticatedUserAccount = {
+          username: 'coordinator',
+          password: coordPass,
+          role: 'admin',
+          pin: coordPin,
+          fullName: settings.coordinatorName || 'Dr. Sant Kumar Gupta (Coordinator)',
+          email: 'sant.k.gupta@gmail.com',
+          status: 'active',
+        };
       }
 
       // Desk Official fallback check
@@ -2793,6 +2817,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authenticated = true;
         resolvedRole = 'desk';
         authenticatedUserName = 'Desk Official';
+        authenticatedUserAccount = {
+          username: 'desk_official',
+          password: staffPass,
+          role: 'desk',
+          pin: staffPin,
+          fullName: 'SC-2033 Desk Official',
+          email: 'sant.k.gupta@gmail.com',
+          status: 'active',
+        };
       }
     }
 
@@ -2809,12 +2842,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem(STORAGE_KEYS.LOCKOUT_STATE, JSON.stringify(clearedLockout));
       } catch {}
 
+      if (authenticatedUserAccount) {
+        setCurrentUserAccount(authenticatedUserAccount);
+        try {
+          sessionStorage.setItem('ignou_sc2033_current_user', JSON.stringify(authenticatedUserAccount));
+        } catch {}
+      }
+
       sessionStorage.setItem("ignou_sc2033_auth", "true");
       sessionStorage.setItem("ignou_sc2033_role", resolvedRole);
       setIsAuthenticated(true);
       setUserRoleState(resolvedRole);
       setCurrentRole(resolvedRole === 'admin' ? 'ADMIN' : 'OFFICIAL');
       fetchAllDataRef.current(false);
+      pullFromSheets(true).catch(() => {});
 
       logAuditEvent({
         action: 'USER_LOGIN',
@@ -2891,13 +2932,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const unlockEditingSession = useCallback((pin: string): { success: boolean; error?: string } => {
     const trimmed = (pin || '').trim();
+    if (!trimmed) {
+      return { success: false, error: 'Please enter your operational PIN or Master Passphrase.' };
+    }
     const deskPin = (securityPins.deskPin || '1001').trim();
     const adminPin = (securityPins.adminPin || '2033').trim();
+    const activeUserPin = (currentUserAccount?.pin || '').trim();
+    const coordPass = (securityCredentials.coordinatorAccount.masterPassphrase || 'sc2033coordinator').trim();
 
-    // Verify against operational PINs (1001 for Desk, 2033 for Coordinator, or custom configured)
-    const isValid = currentRole === 'ADMIN'
-      ? (trimmed === adminPin || trimmed === deskPin || trimmed === '2033' || trimmed === '1001')
-      : (trimmed === deskPin || trimmed === adminPin || trimmed === '1001' || trimmed === '2033');
+    // Collect all valid personal PINs from Google Sheets Users tab
+    const allValidPins = new Set<string>();
+    if (activeUserPin) allValidPins.add(activeUserPin);
+    sheetUsers.forEach((u) => {
+      if (u.pin && u.status !== 'inactive') allValidPins.add(u.pin.trim());
+    });
+    allValidPins.add(adminPin);
+    allValidPins.add(deskPin);
+    allValidPins.add('2033');
+    allValidPins.add('1001');
+
+    // Master Passphrase override: authorizes edits if staff member forgets PIN
+    const isMasterPassphraseMatch = (
+      trimmed === coordPass ||
+      trimmed === 'sc2033coordinator'
+    );
+    const isPinMatch = allValidPins.has(trimmed);
+
+    const isValid = isPinMatch || isMasterPassphraseMatch;
 
     if (isValid) {
       const expiresAt = Date.now() + 20 * 60 * 1000; // 20-minute sliding window
@@ -2908,10 +2969,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logAuditEvent({
         action: 'STEP_UP_AUTHORIZED',
         category: 'SECURITY',
-        actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+        actor: currentUserAccount?.fullName || (currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official'),
         role: currentRole,
         session: currentSession,
-        summary: '20-minute operational editing authorization granted via PIN verification',
+        summary: isMasterPassphraseMatch
+          ? '20-minute editing authorization granted via Coordinator Master Passphrase override'
+          : `20-minute editing authorization granted via personal PIN (${currentUserAccount?.username || 'user'})`,
         status: 'SUCCESS',
       });
       return { success: true };
@@ -2920,14 +2983,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAuditEvent({
       action: 'STEP_UP_FAILED',
       category: 'SECURITY',
-      actor: currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official',
+      actor: currentUserAccount?.fullName || (currentRole === 'ADMIN' ? `${settings.coordinatorName || 'Coordinator'} (Admin)` : 'Desk Official'),
       role: currentRole,
       session: currentSession,
-      summary: 'Operational PIN verification failed for editing action',
+      summary: 'PIN / Master Passphrase verification failed for editing action',
       status: 'WARNING',
     });
-    return { success: false, error: 'Invalid operational PIN. Use your 4-digit PIN (1001 for Desk or 2033 for Coordinator).' };
-  }, [currentRole, securityPins, settings.coordinatorName, currentSession, logAuditEvent]);
+    return { success: false, error: 'Invalid PIN or Master Passphrase. Please enter your personal 4-digit PIN from Google Sheets Users or use Master Passphrase override.' };
+  }, [currentRole, securityPins, securityCredentials, currentUserAccount, sheetUsers, settings.coordinatorName, currentSession, logAuditEvent]);
 
   const lockEditingSession = useCallback(() => {
     setEditingSessionUnlockedUntil(null);
@@ -6991,13 +7054,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 u.Passphrase !== undefined ? u.Passphrase :
                 u.pass !== undefined ? u.pass :
                 u.Pass !== undefined ? u.Pass :
-                u.pin !== undefined ? u.pin :
-                u.PIN !== undefined ? u.PIN :
-                u.Pin !== undefined ? u.Pin :
                 u.secret !== undefined ? u.secret : ''
               ).trim();
               const rawRole = String(u.role || u.Role || u.access || u.Access || u.role_type || u.Role_Type || u.type || u.Type || '').trim().toLowerCase();
               const role: 'admin' | 'desk' = (rawRole.includes('admin') || rawRole.includes('coord') || rawRole.includes('master') || rawRole.includes('director')) ? 'admin' : 'desk';
+              const pin = String(
+                u.pin !== undefined ? u.pin :
+                u.PIN !== undefined ? u.PIN :
+                u.Pin !== undefined ? u.Pin :
+                u.security_pin !== undefined ? u.security_pin :
+                u.Security_PIN !== undefined ? u.Security_PIN :
+                u.SecurityPin !== undefined ? u.SecurityPin :
+                u.edit_pin !== undefined ? u.edit_pin :
+                u.Edit_PIN !== undefined ? u.Edit_PIN :
+                (role === 'admin' ? '2033' : '1001')
+              ).trim();
               const fullName = String(u.fullName || u.name || u.FullName || u.Name || u.Staff_Name || u.staff_name || uname).trim();
               const email = String(u.email || u.Email || u.Email_ID || u.email_id || '').trim();
               const status: 'active' | 'inactive' = String(u.status || u.Status || 'active').trim().toLowerCase().includes('inact') || String(u.status || u.Status || 'active').trim().toLowerCase().includes('disable') ? 'inactive' : 'active';
@@ -7006,6 +7077,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 username: uname,
                 password: pass,
                 role,
+                pin,
                 fullName,
                 email,
                 status,
@@ -10089,6 +10161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         testCustomConnection,
         // Google Sheets Users & Access Governance
         sheetUsers,
+        currentUserAccount,
         saveSheetUser,
         deleteSheetUser,
         // Self-Service Data Governance & Inline Row Editing
